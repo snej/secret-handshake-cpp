@@ -1,0 +1,3 @@
+[submodule "vendor/shs1-c"]
+	path = vendor/shs1-c
+	url = https://github.com/sunrise-choir/shs1-c.git
