@@ -8,12 +8,22 @@
 #include "SecretConnection.hh"
 #include <capnp/capability.h>
 #include <capnp/message.h>
+#include <functional>
 
 namespace snej::shs {
 
     /// Easy Cap'n Proto RPC server using the Secret Handshake protocol.
     class SecretRPCServer {
     public:
+        /// Factory function for the server's main/root capability.
+        /// This is called when a new client connection opens, and is passed the peer identity,
+        /// from which you can get the peer's authenticated public key. (If secrecy is disabled for
+        /// this server, this parameter will be nullptr.)
+        /// You can either ignore the identity and return a singleton object, as with EzRpcServer,
+        /// or you can create a new capability per connection and pass it the connection's public
+        /// key, so it can authorize calls to its API.
+        using MainInterfaceFactory = std::function<capnp::Capability::Client(const SHSPeerIdentity*)>;
+
         /// Initializes & starts the server, asynchronously.
         /// @param shsWrapper  The server's SecretHandshake info, or empty to disable secrecy.
         /// @param mainInterface  The root object to be served.
@@ -21,7 +31,7 @@ namespace snej::shs {
         /// @param defaultPort  The TCP port to listen on, or 0 to pick a random port.
         /// @param readerOpts  Options for reading incoming serialized messages.
         SecretRPCServer(kj::Own<ServerWrapper> shsWrapper,
-                        capnp::Capability::Client mainInterface,
+                        MainInterfaceFactory mainInterface,
                         kj::StringPtr bindAddress = "*",
                         uint16_t defaultPort = 0,
                         capnp::ReaderOptions readerOpts = {});

@@ -6,6 +6,7 @@
 
 #pragma once
 #include "SecretHandshake.hh"
+#include <functional>
 #include <kj/async-io.h>
 
 namespace snej::shs {

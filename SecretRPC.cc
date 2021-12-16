@@ -85,7 +85,7 @@ namespace snej::shs {
 
 
     struct SecretRPCServer::Impl final : public SturdyRefRestorer<AnyPointer>,
-    public kj::TaskSet::ErrorHandler
+                                         public kj::TaskSet::ErrorHandler
     {
         struct ExportedCap {
             kj::String name;
@@ -102,34 +102,45 @@ namespace snej::shs {
             // Make std::map happy...
         };
 
-        struct Connection {
-            kj::AuthenticatedStream stream;
-            TwoPartyVatNetwork network;
-            RpcSystem<capnp::rpc::twoparty::VatId> rpcSystem;
 
+        // Represents an incoming client connection.
+        struct Connection : public SturdyRefRestorer<AnyPointer> {
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"  // SturdyRefRestorer is deprecated
             Connection(kj::AuthenticatedStream&& authStream,
-                       SturdyRefRestorer<AnyPointer>& restorer,
+                       Capability::Client mainInterface,
+                       SturdyRefRestorer<AnyPointer>& parentRestorer,
                        ReaderOptions readerOpts)
-            :stream(kj::mv(authStream))
-            ,network(*this->stream.stream, capnp::rpc::twoparty::Side::SERVER, readerOpts)
-            ,rpcSystem(makeRpcServer(network, restorer))
+            :_stream(kj::mv(authStream))
+            ,_network(*this->_stream.stream, capnp::rpc::twoparty::Side::SERVER, readerOpts)
+            ,_mainInterface(mainInterface)
+            ,_parentRestorer(parentRestorer)
+            ,_rpcSystem(makeRpcServer(_network, *this))
             { }
+
+            Capability::Client restore(AnyPointer::Reader objectId) override {
+                if (objectId.isNull()) {
+                    return _mainInterface;
+                } else {
+                    return _parentRestorer.restore(objectId);
+                }
+            }
 #pragma GCC diagnostic pop
 
-            shs::PublicKey clientPublicKey() const {
-                auto id = dynamic_cast<const shs::SHSPeerIdentity*>(stream.peerIdentity.get());
-                return id->publicKey();
-            }
+            kj::AuthenticatedStream                 _stream;
+            TwoPartyVatNetwork                      _network;
+            RpcSystem<capnp::rpc::twoparty::VatId>  _rpcSystem;
+            Capability::Client                      _mainInterface;
+            SturdyRefRestorer<AnyPointer>&          _parentRestorer;
         };
 
-        Impl(Capability::Client mainInterface,
+
+        Impl(MainInterfaceFactory mainInterfaceFactory,
              kj::StringPtr bindAddress,
              uint defaultPort,
              ReaderOptions readerOpts,
              kj::Own<StreamWrapper> shsContext)
-        :_mainInterface(kj::mv(mainInterface))
+        :_mainInterfaceFactory(kj::mv(mainInterfaceFactory))
         ,_context(SecretRPCContext::getThreadLocal())
         ,_portPromise(nullptr)
         ,_tasks(*this)
@@ -162,25 +173,24 @@ namespace snej::shs {
                                                        kj::AuthenticatedStream&& stream)
             {
                 acceptLoop(kj::mv(listener), readerOpts);
-                auto connection = kj::heap<Connection>(kj::mv(stream), *this, readerOpts);
+                auto peerID = dynamic_cast<const shs::SHSPeerIdentity*>(stream.peerIdentity.get());
+                auto mainInterface = _mainInterfaceFactory(peerID);
+
+                auto connection = kj::heap<Connection>(kj::mv(stream), mainInterface, *this, readerOpts);
                 // Arrange to destroy the Connection when all references are gone, or when the
                 // Server is destroyed (which will destroy the TaskSet).
-                _tasks.add(connection->network.onDisconnect().attach(kj::mv(connection)));
+                _tasks.add(connection->_network.onDisconnect().attach(kj::mv(connection)));
             })));
         }
 
         Capability::Client restore(AnyPointer::Reader objectId) override {
-            if (objectId.isNull()) {
-                return _mainInterface;
+            auto name = objectId.getAs<Text>();
+            auto iter = _exportMap.find(name);
+            if (iter == _exportMap.end()) {
+                KJ_FAIL_REQUIRE("Server exports no such capability.", name) { break; }
+                return nullptr;
             } else {
-                auto name = objectId.getAs<Text>();
-                auto iter = _exportMap.find(name);
-                if (iter == _exportMap.end()) {
-                    KJ_FAIL_REQUIRE("Server exports no such capability.", name) { break; }
-                    return nullptr;
-                } else {
-                    return iter->second.cap;
-                }
+                return iter->second.cap;
             }
         }
 
@@ -188,7 +198,7 @@ namespace snej::shs {
             kj::throwFatalException(kj::mv(exception));
         }
 
-        Capability::Client                   _mainInterface;
+        MainInterfaceFactory                 _mainInterfaceFactory;
         kj::Own<SecretRPCContext>            _context;
         kj::ForkedPromise<uint>              _portPromise;
         kj::TaskSet                          _tasks;
@@ -199,11 +209,11 @@ namespace snej::shs {
     
 
     SecretRPCServer::SecretRPCServer(kj::Own<ServerWrapper> shsContext,
-                                     capnp::Capability::Client mainInterface,
+                                     MainInterfaceFactory mainInterfaceFactory,
                                      kj::StringPtr bindAddress,
                                      uint16_t defaultPort,
                                      capnp::ReaderOptions readerOpts)
-    :_impl(kj::heap<Impl>(mainInterface, bindAddress, defaultPort, readerOpts,
+    :_impl(kj::heap<Impl>(mainInterfaceFactory, bindAddress, defaultPort, readerOpts,
                           kj::mv(shsContext)))
     { }
 
