@@ -96,7 +96,8 @@ namespace snej::shs {
         std::pair<void*, size_t> bytesToRead();
 
         /// Call this after all bytes have been copied into the buffer returned by `bytesToRead`.
-        void readCompleted();
+        /// @return  True if the data is valid, false if the handshake has failed.
+        bool readCompleted();
 
         /// Alternative read API; use instead of `bytesToRead` and `readCompleted`.
         /// Call this when data is received from the peer.
@@ -172,6 +173,8 @@ namespace snej::shs {
         ClientHandshake(Context const& context,
                         PublicKey const& serverPublicKey);
         ~ClientHandshake();
+
+        PublicKey const& serverPublicKey() const            {return _serverPublicKey;}
 
     protected:
         size_t _byteCountNeeded() override;

@@ -146,16 +146,18 @@ namespace snej::shs {
     }
 
 
-    void Handshake::readCompleted() {
+    bool Handshake::readCompleted() {
         if (_inputBuffer.size() != _byteCountNeeded())
             throw std::logic_error("Unexpected call to Handshake::readCompleted");
         if (_receivedBytes(_inputBuffer.data()) > 0) {
             LOG "          ...OK!\n";
             nextStep();
             _inputBuffer.clear();
+            return true;
         } else {
             LOG "          ...invalid data; HANDSHAKE FAILED\n";
             _step = Failed;
+            return false;
         }
     }
 
