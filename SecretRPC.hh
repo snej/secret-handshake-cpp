@@ -64,7 +64,7 @@ namespace snej::shs {
                         kj::StringPtr serverAddress,
                         uint16_t serverPort,
                         capnp::ReaderOptions readerOpts = {});
-
+        SecretRPCClient(SecretRPCClient &&other);
         ~SecretRPCClient() noexcept(false);
 
         template <typename Type>

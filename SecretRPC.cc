@@ -352,6 +352,11 @@ namespace snej::shs {
         }
     }
 
+    SecretRPCClient::SecretRPCClient(SecretRPCClient &&other)
+    :_impl(kj::mv(other._impl))
+    { }
+
+
     kj::WaitScope& SecretRPCClient::getWaitScope() {
         return _impl->_context->getWaitScope();
     }
