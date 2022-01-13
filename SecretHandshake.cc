@@ -373,15 +373,15 @@ namespace snej::shs {
     }
 
 
+#if 0 // DISABLED UNTIL REAL ENCRYPTION IS IMPLEMENTED (see issue #1)
     void Session::encrypt(void *outCiphertext, const void *cleartext, size_t size) const {
-        check(::crypto_stream_xor((uint8_t*)outCiphertext, (const uint8_t*)cleartext, size,
-                                  encryptionNonce.data(), encryptionKey.data()));
+
     }
 
     
     void Session::decrypt(void *outCleartext, const void *ciphertext, size_t size) const {
-        check(::crypto_stream_xor((uint8_t*)outCleartext, (const uint8_t*)ciphertext, size,
-                                  decryptionNonce.data(), decryptionKey.data()));
+
     }
+#endif
 
 }

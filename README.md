@@ -5,6 +5,8 @@ SecretHandshake upgrades your network connections with encryption and _mutual_ a
 
 (You don’t actually need Cap’n Proto to use this, but you’d need to provide your own networking code.)
 
+>**NOTE:** The initial stream-encryption code was badly broken and has been ripped out. (See #1) The remaining code isn't useable for Cap'n Proto, but can still be used just for the SecretHandshake portion. I will update with actually-working, actually-secure encryption ASAP.
+
 ## About SecretHandshake
 
 **SecretHandshake** is “a mutually authenticating key agreement handshake, with forward secure identity metadata.” It was designed by Dominic Tarr and is used in the [Secure Scuttlebutt](https://scuttlebutt.nz) P2P social network.

@@ -215,6 +215,7 @@ namespace snej::shs {
 
         PublicKey   peerPublicKey;          ///< The peer's authenticated public key
 
+#if 0 // DISABLED UNTIL REAL ENCRYPTION IS IMPLEMENTED (see issue #1)
         /// Encrypts outgoing cleartext with the XSalsa20 stream cipher,
         /// using the `encryptionKey` and `encryptionNonce`.
         /// The output is the same length as the input.
@@ -233,6 +234,7 @@ namespace snej::shs {
         /// @param ciphertext  The input data to be decrypted.
         /// @param size  The length in bytes of the input (and resulting output.)
         void decrypt(void *outCleartext, const void *ciphertext, size_t size) const;
+#endif
 
         ~Session();
     };
