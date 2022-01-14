@@ -32,7 +32,7 @@ Even if you don’t use Cap’n Proto at all, you can use the classes in SecretH
 
 ## Building
 
-There isn’t a makefile. ¯\\_(ツ)_/¯ Just compile the four top-level .cc files (C++17 or later), and also `vendor/shs1-c/shs1.c` (C99). Add `vendor/shs1-c/` to the header search path. You’ll also need to install libSodium and make sure it’s in the system header search path.
+There isn’t a makefile. ¯\\\_(ツ)\_/¯ Just compile the four top-level .cc files (C++17 or later), and also `vendor/shs1-c/shs1.c` (C99). Add `vendor/shs1-c/` to the header search path. You’ll also need to install libSodium and make sure it’s in the system header search path.
 
 If someone wants to write a CMake build file, I’ll gratefully accept it.
 
@@ -52,4 +52,4 @@ The code in this repo is provided under the MIT license (like Cap’n Proto.)
 
 The shs-1 submodule is LGPL-licensed. _(🚨 This has licensing implications for any code you statically link it with. If you don’t want that, be sure to build it as a shared library and dynamically link it.)_
 
-lib`Sodium` uses the ISC license.
+libSodium uses the ISC license.
