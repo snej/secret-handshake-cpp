@@ -30,6 +30,7 @@
 
 #include "SecretConnection.hh"
 #include "SecretHandshake.hh"
+#include "SecretStream.hh"
 #include <kj/async-queue.h>
 #include <kj/debug.h>
 #include <kj/vector.h>
@@ -89,6 +90,8 @@ namespace snej::shs {
         kj::Promise<void> connect() {
             return runHandshake().then([&](Session result) {
                 _session = result;
+                _encryptor.emplace(KJ_REQUIRE_NONNULL(_session));
+                _decryptor.emplace(KJ_REQUIRE_NONNULL(_session));
             });
         }
 
@@ -103,37 +106,40 @@ namespace snej::shs {
 
 
         kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-            return _inner.tryRead(buffer, minBytes, maxBytes).then([=](size_t nBytes) {
-                KJ_REQUIRE_NONNULL(_session).decrypt(buffer, buffer, nBytes);
-                return nBytes;
-            });
+            auto &decryptor = KJ_REQUIRE_NONNULL(_decryptor);
+            if (decryptor.bytesAvailable() >= minBytes) {
+                return decryptor.pull(buffer, maxBytes);
+            } else {
+                return _inner.tryRead(buffer, 1, maxBytes).then([=](size_t nBytes) {
+                    if (!KJ_REQUIRE_NONNULL(_decryptor).push(buffer, nBytes))
+                        throw std::runtime_error("Received corrupt input data");
+                    return tryRead(buffer, minBytes, maxBytes);
+                });
+            }
         }
 
 
         kj::Promise<void> write(const void* buffer, size_t size) override {
-            //TODO: Apparently only one write is active at once, so writeBuf can be a member variable
-            auto writeBuf = std::make_unique<uint8_t[]>(size);
-            KJ_REQUIRE_NONNULL(_session).encrypt(writeBuf.get(), buffer, size);
-            return _write(std::move(writeBuf), size);
+            KJ_REQUIRE_NONNULL(_encryptor).push(buffer, size);
+            return _endWrite();
         }
 
 
         kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const kj::byte>> pieces) override {
-            size_t size = 0;
+            auto &encryptor = KJ_REQUIRE_NONNULL(_encryptor);
             for (auto &piece : pieces)
-                size += piece.size();
-            auto writeBuf = std::make_unique<uint8_t[]>(size);
-            auto dst = writeBuf.get();
-            for (auto &piece : pieces) {
-                KJ_REQUIRE_NONNULL(_session).encrypt(dst, piece.begin(), piece.size());
-                dst += piece.size();
-            }
-            return _write(std::move(writeBuf), size);
+                encryptor.push(piece.begin(), piece.size());
+            return _endWrite();
         }
 
 
-        kj::Promise<void> _write(std::unique_ptr<uint8_t[]> &&buf, size_t size) {
-            return _inner.write(buf.get(), size).attach(std::move(buf));
+        kj::Promise<void> _endWrite() {
+            auto &encryptor = KJ_REQUIRE_NONNULL(_encryptor);
+            encryptor.endMessage();
+            auto avail = encryptor.availableData();
+            return _inner.write(avail.data, avail.size).then([=] {
+                KJ_REQUIRE_NONNULL(_encryptor).skip(avail.size);
+            });
         }
 
 
@@ -163,13 +169,15 @@ namespace snej::shs {
         }
 
     private:
-        kj::Own<Handshake>          _handshake;
-        kj::Maybe<Session>          _session;
-        StreamWrapper::Authorizer   _authorizer;
-        kj::AsyncIoStream&          _inner;
-        kj::Own<kj::AsyncIoStream>  _ownInner;
+        kj::Own<Handshake>           _handshake;
+        StreamWrapper::Authorizer    _authorizer;
+        kj::AsyncIoStream&           _inner;
+        kj::Own<kj::AsyncIoStream>   _ownInner;
         kj::Maybe<kj::Promise<void>> _shutdownTask;
-        bool                        _disconnected = false;
+        kj::Maybe<Session>           _session;
+        kj::Maybe<EncryptionStream>  _encryptor;
+        kj::Maybe<DecryptionStream>  _decryptor;
+        bool                         _disconnected = false;
     };
 
 

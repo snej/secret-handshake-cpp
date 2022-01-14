@@ -372,16 +372,4 @@ namespace snej::shs {
         ::sodium_memzero(this, sizeof(*this));
     }
 
-
-#if 0 // DISABLED UNTIL REAL ENCRYPTION IS IMPLEMENTED (see issue #1)
-    void Session::encrypt(void *outCiphertext, const void *cleartext, size_t size) const {
-
-    }
-
-    
-    void Session::decrypt(void *outCleartext, const void *ciphertext, size_t size) const {
-
-    }
-#endif
-
 }

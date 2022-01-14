@@ -215,27 +215,6 @@ namespace snej::shs {
 
         PublicKey   peerPublicKey;          ///< The peer's authenticated public key
 
-#if 0 // DISABLED UNTIL REAL ENCRYPTION IS IMPLEMENTED (see issue #1)
-        /// Encrypts outgoing cleartext with the XSalsa20 stream cipher,
-        /// using the `encryptionKey` and `encryptionNonce`.
-        /// The output is the same length as the input.
-        /// @param outCiphertext  The address to write the encrypted data to.
-        ///                       It's OK to use the same address as `cleartext`.
-        /// @param cleartext  The input data to be encrypted.
-        /// @param size  The length in bytes of the input (and resulting output.)
-        void encrypt(void *outCiphertext, const void *cleartext, size_t size) const;
-
-        /// Encrypts incoming ciphertext with the XSalsa20 stream cipher,
-        /// using the `encryptionKey` and `encryptionNonce`.
-        /// The output is the same length as the input.
-        /// It's OK for the input and output buffers to be the same.
-        /// @param outCleartext  The address to write the decrypted cleartext to.
-        ///                       It's OK to use the same address as `ciphertext`.
-        /// @param ciphertext  The input data to be decrypted.
-        /// @param size  The length in bytes of the input (and resulting output.)
-        void decrypt(void *outCleartext, const void *ciphertext, size_t size) const;
-#endif
-
         ~Session();
     };
 
