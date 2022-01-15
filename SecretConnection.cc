@@ -128,15 +128,14 @@ namespace snej::shs {
         kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const kj::byte>> pieces) override {
             auto &encryptor = KJ_REQUIRE_NONNULL(_encryptor);
             for (auto &piece : pieces)
-                encryptor.push(piece.begin(), piece.size());
+                encryptor.pushPartial(piece.begin(), piece.size());
+            encryptor.flush();
             return _endWrite();
         }
 
 
         kj::Promise<void> _endWrite() {
-            auto &encryptor = KJ_REQUIRE_NONNULL(_encryptor);
-            encryptor.endMessage();
-            auto avail = encryptor.availableData();
+            auto avail = KJ_REQUIRE_NONNULL(_encryptor).availableData();
             return _inner.write(avail.data, avail.size).then([=] {
                 KJ_REQUIRE_NONNULL(_encryptor).skip(avail.size);
             });

@@ -177,9 +177,13 @@ TEST_CASE_METHOD(SessionTest, "Encrypted Messages", "[SecretHandshake]") {
 
     // Decrypt:
     uint8_t clearBuf[256] = {};
-    CHECK(CryptoBox::getDecryptedSize({cipherBuf, 0}) == getSizeResult{CryptoBox::IncompleteInput, 0});
-    CHECK(CryptoBox::getDecryptedSize({cipherBuf, 1}) == getSizeResult{CryptoBox::IncompleteInput, 0});
-    CHECK(CryptoBox::getDecryptedSize({cipherBuf, 2}) == getSizeResult{CryptoBox::Success, inClear.size});
+    CHECK(box2.getDecryptedSize({cipherBuf, 0}) == getSizeResult{CryptoBox::IncompleteInput, 0});
+    CHECK(box2.getDecryptedSize({cipherBuf, 1}) == getSizeResult{CryptoBox::IncompleteInput, 0});
+#if BOXSTREAM_COMPATIBLE
+#else
+    CHECK(box2.getDecryptedSize({cipherBuf, 2}) == getSizeResult{CryptoBox::Success, inClear.size});
+#endif
+    CHECK(box2.getDecryptedSize({cipherBuf, sizeof(cipherBuf)}) == getSizeResult{CryptoBox::Success, inClear.size});
 
     input_data inCipher = {cipherBuf, 0};
     output_buffer outClear = {clearBuf, sizeof(clearBuf)};
@@ -230,7 +234,9 @@ TEST_CASE_METHOD(SessionTest, "Encrypted Messages Overlapping Buffers", "[Secret
     output_buffer outCipher = {buffer, sizeof(buffer)};
     CHECK(box1.encrypt(inClear, outCipher) == CryptoBox::Success);
 
-    CHECK(CryptoBox::getDecryptedSize({buffer, 2}) == getSizeResult{CryptoBox::Success, inClear.size});
+#if !BOXSTREAM_COMPATIBLE
+    CHECK(box2.getDecryptedSize({buffer, 2}) == getSizeResult{CryptoBox::Success, inClear.size});
+#endif
 
     input_data inCipher = {buffer, sizeof(buffer)};
     output_buffer outClear = {buffer, sizeof(buffer)};
@@ -244,6 +250,12 @@ TEST_CASE_METHOD(SessionTest, "Encrypted Messages Overlapping Buffers", "[Secret
 
 
 TEST_CASE_METHOD(SessionTest, "Decryption Stream", "[SecretHandshake]") {
+#if BOXSTREAM_COMPATIBLE
+    static constexpr size_t kEncOverhead = 34;
+#else
+    static constexpr size_t kEncOverhead = 18;
+#endif
+
     EncryptionStream enc(session1);
     DecryptionStream dec(session2);
     char cipherBuf[256], clearBuf[256];
@@ -256,14 +268,16 @@ TEST_CASE_METHOD(SessionTest, "Decryption Stream", "[SecretHandshake]") {
     };
 
     // Encrypt a message:
-    enc.push("Hello", 5);
+    enc.pushPartial("Hel", 3);
     CHECK(enc.bytesAvailable() == 0);
-    enc.endMessage();
-    CHECK(enc.bytesAvailable() == 23);
+    enc.pushPartial("lo", 2);
+    CHECK(enc.bytesAvailable() == 0);
+    enc.flush();
+    CHECK(enc.bytesAvailable() == 5 + kEncOverhead);
 
     // Transfer it in two parts:
     transfer(10);
-    CHECK(enc.bytesAvailable() == 13);
+    CHECK(enc.bytesAvailable() == 5 + kEncOverhead - 10);
     CHECK(dec.bytesAvailable() == 0);
     transfer(100);
     CHECK(enc.bytesAvailable() == 0);
@@ -276,11 +290,10 @@ TEST_CASE_METHOD(SessionTest, "Decryption Stream", "[SecretHandshake]") {
 
     // Now add two encrypted mesages, but only transfer the first:
     enc.push(" there", 6);
-    enc.endMessage();
-    enc.push(", world", 7);
+    enc.pushPartial(", world", 7);
     transfer(100);
-    enc.endMessage();
-    CHECK(enc.bytesAvailable() == 25);
+    enc.flush();
+    CHECK(enc.bytesAvailable() == 7 + kEncOverhead);
 
     // Now read part of the first:
     CHECK(dec.bytesAvailable() == 6);

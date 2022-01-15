@@ -7,6 +7,12 @@
 #pragma once
 #include "SecretHandshake.hh"
 
+// Set this to 1 for compatibility with Scuttlebutt's BoxStream protocol
+// https://ssbc.github.io/scuttlebutt-protocol-guide/#box-stream
+// The non-compatible protocol has less overhead (18 bytes per message not 34)
+// but is potentially less secure because the message boundaries could be detected.
+#define BOXSTREAM_COMPATIBLE 1
+
 namespace snej::shs {
 
     /// Points to immutable data to be encrypted or decrypted.
@@ -34,8 +40,8 @@ namespace snej::shs {
         enum status {
             Success,            ///< Encryption/decryption succeeded
             OutTooSmall,        ///< The output's capacity is too small
-            IncompleteInput,    ///< Need more input data to decrypt (`decrypt` only)
-            CorruptData         ///< The encrypted data is corrupted (`decrypt` only)
+            IncompleteInput,    ///< Need more input data to decrypt
+            CorruptData         ///< The encrypted data is corrupted
         };
 
         /// Encrypts an outgoing message using libSodium's "secretbox".
@@ -47,7 +53,7 @@ namespace snej::shs {
         /// @return  The status, either `Success` or `OutTooSmall`.
         status encrypt(input_data in, output_buffer &out);
 
-        /// Returns the encrypted size of a message. (It will be about 18 bytes larger.)
+        /// Returns the encrypted size of a message. (It will be a few bytes larger than the input.)
         static size_t encryptedSize(size_t inputSize);
 
         /// Decrypts incoming data from the encrypted stream, reading the next message if it's
@@ -78,7 +84,7 @@ namespace snej::shs {
         /// - `Success` if the size is known; the `size_t` will be the decrypted message size.
         /// - `IncompleteInput` if there's not enough input to determine the size
         /// - `CorruptData` if the input data is corrupted
-        static std::pair<status, size_t> getDecryptedSize(input_data);
+        std::pair<status, size_t> getDecryptedSize(input_data);
 
     private:
         Session& _session;
@@ -89,7 +95,6 @@ namespace snej::shs {
     // Abstract base class of EncryptionStream and DecryptionStream.
     class CryptoStream : protected CryptoBox {
     public:
-
         /// Reads processed (encrypted or decrypted) data, copying it from the internal buffer.
         /// @param buffer  The address to copy data to
         /// @param maxSize  The maximum number of bytes to copy
@@ -112,15 +117,14 @@ namespace snej::shs {
         CryptoStream(const CryptoStream&) = delete;
         CryptoStream& operator=(const CryptoStream&) = delete;
 
-        std::vector<uint8_t>    _buffer;
-        size_t                  _processedBytes = 0;
+        std::vector<uint8_t> _buffer;                // processed followed by unprocessed bytes
+        size_t               _processedBytes = 0;    // # of bytes already encrypted/decrypted
     };
 
 
 
     /// Stream-oriented adapter for Session-based encryption.
-    /// You _push_ cleartext bytes into it, call `endMessage` when a message is completed,
-    /// and _pull_ encrypted bytes out of it.
+    /// You _push_ cleartext bytes into it, and _pull_ encrypted bytes out of it.
     /// Pull doesn't have to keep up with push; data will be buffered as needed.
     class EncryptionStream : public CryptoStream {
     public:
@@ -128,13 +132,19 @@ namespace snej::shs {
         /// @note It keeps a pointer to the Session, which must remain valid.
         explicit EncryptionStream(Session &session)             :CryptoStream(session) { }
 
-        /// Appends data to the current message, but does not complete it.
+        /// Encrypts data. The ciphertext is then available to pull.
         /// @param data  The address of the cleartext data to add
         /// @param size  The size of the data
         void push(const void *data, size_t size);
 
-        /// Completes a message, encrypting its data, which is then available to pull.
-        void endMessage();
+        /// Appends cleartext data to the internal buffer, but does not encrypt it yet.
+        /// You can call this multiple times, then call `flush`.
+        /// @param data  The address of the cleartext data to add
+        /// @param size  The size of the data
+        void pushPartial(const void *data, size_t size);
+
+        /// Encrypts all data buffered by `pushPartial`, which is then available to pull.
+        void flush();
     };
 
 
@@ -152,7 +162,7 @@ namespace snej::shs {
         /// Adds encrypted data received from the sender.
         /// It will be internally buffered and decrypted.
         /// @note Pushing data doesn't guarantee there will be bytes to pull;
-        /// decryption only occurs when a complete encrypted block is received.
+        ///       decryption only occurs when a complete encrypted block is received.
         /// @param data  The address of the encrypted data to add
         /// @param size  The size of the encrypted data
         /// @return  True on success, false if the data is corrupted.
