@@ -26,7 +26,7 @@
 
 #include "SecretHandshake.hh"
 #include "SecretStream.hh"
-#include <sodium.h>
+#include "monocypher/base.hh"
 #include <iostream>
 
 #include "catch.hpp"        // https://github.com/catchorg/Catch2
@@ -37,26 +37,32 @@ using namespace snej::shs;
 
 template <size_t SIZE>
 static void randomize(std::array<uint8_t,SIZE> &array) {
-    randombytes_buf(array.data(), SIZE);
+    monocypher::randomize(array.data(), SIZE);
 }
 
-template <size_t SIZE>
-static string hexString(std::array<uint8_t,SIZE> const& array) {
+static string hexString(const void *buf, size_t size) {
     string hex;
-    hex.resize(2 * SIZE);
-    sodium_bin2hex(hex.data(), hex.size() + 1, array.data(), array.size());
+    hex.resize(2 * size);
+    char *dst = hex.data();
+    for (size_t i = 0; i < size; i++)
+        dst += sprintf(dst, "%02x", ((const uint8_t*)buf)[i]);
     return hex;
+}
+
+template <size_t Size>
+string hexString(const std::array<uint8_t,Size> &a) {
+    return hexString(a.data(), Size);
 }
 
 
 TEST_CASE("SecretKey", "[SecretHandshake]") {
-    SecretKey sk = SecretKey::generate();
-    PublicKey pk = sk.publicKey();
-    SecretKeySeed seed = sk.seed();
+    KeyPair kp = KeyPair::generate();
+    PublicKey pk = kp.publicKey;
+    SigningKey sk = kp.signingKey;
 
-    SecretKey sk2 = SecretKey(seed);
-    PublicKey pk2 = sk2.publicKey();
-    CHECK(sk2 == sk);
+    KeyPair kp2 = KeyPair(sk);
+    PublicKey pk2 = kp2.publicKey;
+    CHECK(kp2 == kp);
     CHECK(pk2 == pk);
 }
 
@@ -72,15 +78,15 @@ TEST_CASE("AppID", "[SecretHandshake]") {
 
 
 struct HandshakeTest {
-    SecretKey serverKey, clientKey;
+    KeyPair serverKey, clientKey;
     ServerHandshake server;
     ClientHandshake client;
 
     HandshakeTest()
-    :serverKey(SecretKey::generate())
-    ,clientKey(SecretKey::generate())
+    :serverKey(KeyPair::generate())
+    ,clientKey(KeyPair::generate())
     ,server({"App", serverKey})
-    ,client({"App", clientKey}, serverKey.publicKey())
+    ,client({"App", clientKey}, serverKey.publicKey)
     { }
 
     bool sendFromTo(Handshake &src, Handshake &dst, size_t expectedCount) {
@@ -116,14 +122,14 @@ TEST_CASE_METHOD(HandshakeTest, "Handshake", "[SecretHandshake]") {
     CHECK(clientSession.decryptionKey   == serverSession.encryptionKey);
     CHECK(clientSession.decryptionNonce == serverSession.encryptionNonce);
 
-    CHECK(serverSession.peerPublicKey   == clientKey.publicKey());
-    CHECK(clientSession.peerPublicKey   == serverKey.publicKey());
+    CHECK(serverSession.peerPublicKey   == clientKey.publicKey);
+    CHECK(clientSession.peerPublicKey   == serverKey.publicKey);
 }
 
 
 TEST_CASE_METHOD(HandshakeTest, "Handshake with wrong server key", "[SecretHandshake]") {
     // Create a client that has the wrong server public key:
-    PublicKey badServerKey = client.serverPublicKey();
+    PublicKey badServerKey = serverKey.publicKey;
     badServerKey[17]++;
     ClientHandshake badClient({"App", clientKey}, badServerKey);
 

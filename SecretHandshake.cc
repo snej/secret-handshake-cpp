@@ -24,9 +24,8 @@
 // THE SOFTWARE.
 
 #include "SecretHandshake.hh"
-extern "C" {
-    #include "shs1.h"
-}
+#include "shs.hh"
+#include "monocypher/signatures.hh"
 #include <cstring>
 #include <mutex>
 #include <stdexcept>
@@ -42,60 +41,20 @@ extern "C" {
 
 namespace snej::shs {
 
-    // Make sure the wrapper types are the correct size:
-    static_assert(sizeof(PublicKey)     == crypto_sign_PUBLICKEYBYTES);
-    static_assert(sizeof(SecretKey)     == crypto_sign_SECRETKEYBYTES);
-    static_assert(sizeof(SecretKeySeed) == crypto_sign_SEEDBYTES);
-    static_assert(sizeof(SessionKey)    == crypto_secretbox_KEYBYTES);
-    static_assert(sizeof(Nonce)         == crypto_secretbox_NONCEBYTES);
 
-
-    static void INIT() {
-        static std::once_flag flag;
-        std::call_once(flag, [] {
-            if (::sodium_init() != 0)
-                throw std::runtime_error("Error initializing crypto (libsodium)");
-        });
-    }
-
-
-    static void check(int naResult) {
-        if (naResult != 0)
-            throw std::runtime_error("Crypto error from libsodium");
-    }
-
-
-    SecretKey::~SecretKey() {
-        ::sodium_memzero(this, sizeof(this));
-    }
-
-    SecretKey::SecretKey(SecretKeySeed const& seed) {
-        INIT();
-        PublicKey publicKey; // unused
-        check(::crypto_sign_seed_keypair(publicKey.data(), data(), seed.data()));
-    }
+    KeyPair::KeyPair(SigningKey const& sk)
+    :signingKey(sk)
+    ,publicKey(impl::signing_key(sk).get_public_key())
+    { }
     
 
-    SecretKey SecretKey::generate() {
-        INIT();
-        SecretKey keyPair;
-        PublicKey publicKey; // unused
-        check(::crypto_sign_keypair(publicKey.data(), keyPair.data()));
-        return keyPair;
+    KeyPair KeyPair::generate() {
+        return KeyPair(impl::signing_key::generate());
     }
 
 
-    PublicKey SecretKey::publicKey() const {
-        PublicKey result;
-        check(::crypto_sign_ed25519_sk_to_pk(result.data(), data()));
-        return result;
-    }
-
-
-    SecretKeySeed SecretKey::seed() const {
-        SecretKeySeed result;
-        check(::crypto_sign_ed25519_sk_to_seed(result.data(), data()));
-        return result;
+    KeyPair::~KeyPair() {
+        monocypher::wipe(&signingKey, sizeof(signingKey));
     }
 
 
@@ -109,24 +68,23 @@ namespace snej::shs {
     }
 
 
+    Session::~Session() {
+        monocypher::wipe(this, sizeof(*this));
+    }
+
+
 #pragma mark - HANDSHAKE:
 
 
-    Handshake::Handshake(Context const& context, size_t stateSize)
+    Handshake::Handshake(Context const& context)
     :_context(context)
-    ,_publicKey(context.keyPair.publicKey())
-    ,_state(std::make_unique<uint8_t[]>(stateSize))
-    {
-        INIT();
-        static_assert(sizeof(_ephemeralPublicKey) == crypto_box_PUBLICKEYBYTES);
-        static_assert(sizeof(_ephemeralSecretKey) == crypto_box_SECRETKEYBYTES);
-        check(::crypto_box_keypair(_ephemeralPublicKey.data(), _ephemeralSecretKey.data()));
-    }
+    ,_impl(std::make_unique<impl::handshake>(impl::app_id(context.appID),
+                                            impl::signing_key(context.keyPair.signingKey),
+                                            impl::public_key(context.keyPair.publicKey)))
+    { }
 
 
-    Handshake::~Handshake() {
-        ::sodium_memzero(&_ephemeralSecretKey, sizeof(_ephemeralSecretKey));
-    }
+    Handshake::~Handshake() = default;
 
 
     void Handshake::nextStep() {
@@ -228,148 +186,107 @@ namespace snej::shs {
     Session Handshake::session() {
         if (_step != Finished)
             throw std::logic_error("Secret Handshake protocol isn't complete");
-        SHS1_Outcome oc;
-        _fillOutcome(&oc);
         Session session;
-        session.encryptionKey   = *(SessionKey*)&oc.encryption_key;
-        session.decryptionKey   = *(SessionKey*)&oc.decryption_key;
-        session.encryptionNonce = *(Nonce*)&oc.encryption_nonce;
-        session.decryptionNonce = *(Nonce*)&oc.decryption_nonce;
-        session.peerPublicKey   = *(PublicKey*)&oc.peer_longterm_pk;
+        _impl->getOutcome((impl::session_key&)session.encryptionKey,
+                          (impl::nonce&)session.encryptionNonce,
+                          (impl::session_key&)session.decryptionKey,
+                          (impl::nonce&)session.decryptionNonce,
+                          (impl::public_key&)session.peerPublicKey);
         return session;
+    }
+
+
+    template <class T>
+    static T& spaceFor(std::vector<uint8_t> &output) {
+        output.resize(sizeof(T));
+        return *(T*)output.data();
     }
 
 
 #pragma mark - CLIENT:
 
 
-    #define _clientState() (SHS1_Client*)_state.get()
-
-
     ClientHandshake::ClientHandshake(Context const& context,
                                      PublicKey const& theirPublicKey)
-    :Handshake(context, sizeof(SHS1_Client))
+    :Handshake(context)
     ,_serverPublicKey(theirPublicKey)
     {
-        ::shs1_init_client(_clientState(),
-                           _context.appID.data(), _publicKey.data(), _context.keyPair.data(),
-                           _ephemeralPublicKey.data(), _ephemeralSecretKey.data(),
-                           _serverPublicKey.data());
-    }
-
-
-    ClientHandshake::~ClientHandshake() {
-        ::shs1_client_clean(_clientState());
+        _impl->setServerPublicKey(impl::public_key(theirPublicKey));
     }
 
 
     size_t ClientHandshake::_byteCountNeeded() {
         switch (_step) {
-            case ServerChallenge:  return SHS1_SERVER_CHALLENGE_BYTES;
-            case ServerAck:        return SHS1_SERVER_ACK_BYTES;
-            default:                return 0;
+            case ServerChallenge:  return sizeof(impl::ChallengeData);
+            case ServerAck:        return sizeof(impl::ServerAckData);
+            default:               return 0;
         }
     }
 
 
     bool ClientHandshake::_receivedBytes(const uint8_t *bytes) {
-        auto state = _clientState();
         switch (_step) {
-            case ServerChallenge:  return ::shs1_verify_server_challenge(bytes, state);
-            case ServerAck:        return ::shs1_verify_server_ack(bytes, state);
+            case ServerChallenge:  return _impl->verifyChallenge(*(impl::ChallengeData*)bytes);
+            case ServerAck:        return _impl->verifyServerAck(*(impl::ServerAckData*)bytes);
             default:               return false;
         }
     }
 
 
     void ClientHandshake::_fillOutputBuffer(std::vector<uint8_t> &output) {
-        auto state = _clientState();
         switch (_step) {
             case ClientChallenge:
-                output.resize(SHS1_CLIENT_CHALLENGE_BYTES);
-                ::shs1_create_client_challenge(output.data(), state);
+                spaceFor<impl::ChallengeData>(output) = _impl->createClientChallenge();
                 break;
             case ClientAuth:
-                output.resize(SHS1_CLIENT_AUTH_BYTES);
-                ::shs1_create_client_auth(output.data(), state);
+                spaceFor<impl::ClientAuthData>(output) = _impl->createClientAuth();
                 break;
             default:
                 break;
         }
-    }
-
-
-    void ClientHandshake::_fillOutcome(void *outcome) {
-        ::shs1_client_outcome((SHS1_Outcome*)outcome, _clientState());
     }
 
 
 #pragma mark - SERVER:
 
 
-    #define _serverState() (SHS1_Server*)_state.get()
+    #define _serverState() (impl::shs_server*)_state.get()
 
 
     ServerHandshake::ServerHandshake(Context const& context)
-    :Handshake(context, sizeof(SHS1_Server))
-    {
-        ::shs1_init_server(_serverState(),
-                           _context.appID.data(), _publicKey.data(), _context.keyPair.data(),
-                           _ephemeralPublicKey.data(), _ephemeralSecretKey.data());
-    }
-
-
-    ServerHandshake::~ServerHandshake() {
-        ::shs1_server_clean(_serverState());
-    }
+    :Handshake(context)
+    { }
 
 
     size_t ServerHandshake::_byteCountNeeded() {
         switch (_step) {
-            case ClientChallenge:  return SHS1_CLIENT_CHALLENGE_BYTES;
-            case ClientAuth:       return SHS1_CLIENT_AUTH_BYTES;
+            case ClientChallenge:  return sizeof(impl::ChallengeData);
+            case ClientAuth:       return sizeof(impl::ClientAuthData);
             default:               return 0;
         }
     }
 
 
     bool ServerHandshake::_receivedBytes(const uint8_t *bytes) {
-        auto state = _serverState();
         switch (_step) {
-            case ClientChallenge:  return ::shs1_verify_client_challenge(bytes, state);
-            case ClientAuth:       return ::shs1_verify_client_auth(bytes, state);
+            case ClientChallenge:  return _impl->verifyChallenge(*(impl::ChallengeData*)bytes);
+            case ClientAuth:       return _impl->verifyClientAuth(*(impl::ClientAuthData*)bytes);
             default:               return false;
         }
     }
 
 
     void ServerHandshake::_fillOutputBuffer(std::vector<uint8_t> &output) {
-        auto state = _serverState();
         switch (_step) {
             case ServerChallenge:
-                output.resize(SHS1_SERVER_CHALLENGE_BYTES);
-                ::shs1_create_server_challenge(output.data(), state);
+                spaceFor<impl::ChallengeData>(output) = _impl->createServerChallenge();
                 break;
             case ServerAck:
-                output.resize(SHS1_SERVER_ACK_BYTES);
-                ::shs1_create_server_ack(output.data(), state);
+                spaceFor<impl::ServerAckData>(output) = _impl->createServerAck();
                 break;
             default:
                 break;
         }
-    }
-
-
-    void ServerHandshake::_fillOutcome(void *outcome) {
-        ::shs1_server_outcome((SHS1_Outcome*)outcome, _serverState());
-    }
-
-
-#pragma mark - SESSION:
-
-
-    Session::~Session() {
-        ::sodium_memzero(this, sizeof(*this));
     }
 
 }
