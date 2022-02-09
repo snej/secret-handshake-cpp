@@ -7,12 +7,6 @@
 #pragma once
 #include "SecretHandshake.hh"
 
-// Set this to 1 for compatibility with Scuttlebutt's BoxStream protocol
-// https://ssbc.github.io/scuttlebutt-protocol-guide/#box-stream
-// The non-compatible protocol has less overhead (18 bytes per message not 34)
-// but is potentially less secure because the message boundaries could be detected.
-#define BOXSTREAM_COMPATIBLE 1
-
 namespace snej::shs {
 
     /// Points to immutable data to be encrypted or decrypted.
@@ -30,12 +24,19 @@ namespace snej::shs {
 
 
 
-    /// Message-oriented encryption using keys & nonces from a Session.
+    /// Message-oriented encryption using keys & nonces from a Session:
+    /// - Encrypts a sequence of arbitrary-size blocks of data ("messages"). Each encrypted message
+    ///   is prefixed with its size and a MAC.
+    /// - Decrypts _entire messages_ in the same order they were sent. Reads the message size so it
+    ///   knows how big the full message is, and indicates whether the message is incomplete.
+    /// `EncryptionStream` and `DecryptionStream` wrap this to provide a byte-oriented stream API.
     class CryptoBox {
     public:
-        /// Constructs a CryptoBox on a Session.
-        /// @note It keeps a pointer to the Session, which must remain valid.
-        explicit CryptoBox(Session &session)             :_session(session) { }
+        /// Data format to use for encrypted messages.
+        enum Protocol {
+            Compact,    ///< Less overhead, but message lengths are eavesdroppable.
+            BoxStream   ///< Scuttlebutt-compatible. More overhead, but msg lengths are encrypted.
+        };
 
         enum status {
             Success,            ///< Encryption/decryption succeeded
@@ -44,29 +45,53 @@ namespace snej::shs {
             CorruptData         ///< The encrypted data is corrupted
         };
 
-        /// Encrypts an outgoing message using libSodium's "secretbox".
+        /// Constructs a CryptoBox on a Session.
+        /// @note It keeps a pointer to the Session, which must remain valid.
+        explicit CryptoBox(Session &session, Protocol protocol =Compact)
+        :_session(session)
+        ,_protocol(protocol)
+        { }
+
+        /// The maximum byte length of a message, before encryption.
+        static constexpr size_t kMaxMessageSize = 0xFFFF;
+
+        /// Returns the encrypted size of a message. (It will be somewhat larger than the input.)
+        size_t encryptedSize(size_t inputSize);
+
+        /// Encrypts an outgoing message, attaching the MAC and size.
         /// @note  Currently the maximum size message is 65535 bytes.
         /// @param in  The message to be sent.
         /// @param out  Where to write the encrypted message.
-        ///             On entry, its `data` must be set, and `size` must be the maximum capacity.
-        ///             On success, its `size` will be set to the encrypted size.
+        ///             On entry `out.data` must be set and `out.size` must be the maximum capacity.
+        ///             On success, `out.size` will be set to the encrypted size.
         /// @return  The status, either `Success` or `OutTooSmall`.
         status encrypt(input_data in, output_buffer &out);
 
-        /// Returns the encrypted size of a message. (It will be a few bytes larger than the input.)
-        static size_t encryptedSize(size_t inputSize);
+        /// Returns the size of message that the input data will decrypt to, if known.
+        /// The data doesn't need to contain a complete message, just the first few bytes.
+        /// This can be used to ensure the output buffer passed to `decrypt` has enough capacity.
+        /// The `status` value will be:
+        /// - `Success` if the size is known; the `size_t` will be the decrypted message size.
+        /// - `IncompleteInput` if there's not enough input to determine the size
+        /// - `CorruptData` if the input data is corrupted
+        std::pair<status, size_t> getDecryptedSize(input_data);
 
         /// Decrypts incoming data from the encrypted stream, reading the next message if it's
-        /// completely available. This always reads one entire message, of the same size as passed
-        /// to `encrypt` on the other end.
+        /// completely available. This always reads one entire message, as passed to `encrypt`
+        /// on the other end.
         ///
-        /// If the input data doesn't contain the entire message, nothing is consumed and
-        /// `IncompleteInput` is returned.
+        /// If the input data is incomplete (doesn't contain the entire message), nothing is
+        /// consumed and `IncompleteInput` is returned.
         ///
-        /// If the input data contains more than just one message, the remaining data is not
-        /// consumed; the `input_data` will be adjusted to point to the remaining data.
-        /// The remaining data could contain another complete message, so if `Success` is returned
-        /// you should call `decrypt` again.
+        /// If the output buffer is too small to hold the entire message, nothing is consumed
+        /// and `OutTooSmall` is returned. You can then call `getDecryptedSize` to find out how big
+        /// a buffer you need.
+        ///
+        /// If the input data contains more than just one message, the extra data is not
+        /// consumed; `in.data` will be adjusted to point to the remaining data.
+        ///
+        /// After `Success` is returned, there could be another complete message remaining in the
+        /// buffer, so you should call `decrypt` again (potentially multiple times.)
         ///
         /// @param in  Data from the stream. On success, **this will be adjusted** to account for
         ///            the bytes consumed: `data` will point to the first unread byte, and `size`
@@ -77,17 +102,9 @@ namespace snej::shs {
         /// @return  The status; see the description of the 'status' enum values.
         status decrypt(input_data &in, output_buffer &out);
 
-        /// Returns the size that the input data will decrypt to, if known.
-        /// The data doesn't need to contain a complete message, just the first few bytes.
-        /// This can be used to ensure the output buffer passed to `decrypt` has enough capacity.
-        /// The `status` value will be:
-        /// - `Success` if the size is known; the `size_t` will be the decrypted message size.
-        /// - `IncompleteInput` if there's not enough input to determine the size
-        /// - `CorruptData` if the input data is corrupted
-        std::pair<status, size_t> getDecryptedSize(input_data);
-
     private:
-        Session& _session;
+        Session&       _session;
+        Protocol const _protocol;
     };
 
 
@@ -113,7 +130,7 @@ namespace snej::shs {
         size_t skip(size_t);
 
     protected:
-        explicit CryptoStream(Session &session) :CryptoBox(session) { }
+        explicit CryptoStream(Session &session, Protocol p) :CryptoBox(session, p) { }
         CryptoStream(const CryptoStream&) = delete;
         CryptoStream& operator=(const CryptoStream&) = delete;
 
@@ -130,7 +147,8 @@ namespace snej::shs {
     public:
         /// Constructs a DecryptionStream on a Session.
         /// @note It keeps a pointer to the Session, which must remain valid.
-        explicit EncryptionStream(Session &session)             :CryptoStream(session) { }
+        explicit EncryptionStream(Session &session, CryptoBox::Protocol protocol =Compact)
+        :CryptoStream(session, protocol) { }
 
         /// Encrypts data. The ciphertext is then available to pull.
         /// @param data  The address of the cleartext data to add
@@ -157,7 +175,8 @@ namespace snej::shs {
     public:
         /// Constructs a DecryptionStream on a Session.
         /// @note It keeps a pointer to the Session, which must remain valid.
-        explicit DecryptionStream(Session &session)             :CryptoStream(session) { }
+        explicit DecryptionStream(Session &session, CryptoBox::Protocol protocol =Compact)
+        :CryptoStream(session, protocol) { }
 
         /// Adds encrypted data received from the sender.
         /// It will be internally buffered and decrypted.
