@@ -19,64 +19,7 @@
 #include "shs.hh"
 
 
-/*
- HERE IS THE MATH:
-
- From <http://dominictarr.github.io/secret-handshake-paper/shs.pdf>, p.11
- (there's also a tutorial at <https://ssbc.github.io/scuttlebutt-protocol-guide/#handshake>)
-
- # Terminology:
-    "A" means "client" and "B" means "server".
-    K       : the application ID (a 256-bit constant known to both, probably hardcoded)
-    (A, Ap) : client's long-term Ed25519 key pair
-    (B, Bp) : server's long-term Ed25519 key pair
-    (a, ap) : client's ephemeral X25519 key pair
-    (b, bp) : server's ephemeral X25519 key pair
-
- # Functions:
-    x | y       : string concatenation
-    x · y       : Curve25519 scalar multiplication (shared secret derivation) of my _private_ key x
-                  and peer's _public_ key y, i.e. x·yp, which is the same as y·xp
-    hmac[k](d)  : HMAC-SHA-512-256 of data `d` with key `k`
-                  (this is HMAC-SHA-512 with output truncated to 256 bits)
-    hash(d)     : SHA256 hash of `d`
-    sign[k](d)  : Ed25519 digital signature of `d` with key `k`
-    box[k](d)   : "Secret box" as in libSodium or RFC8439, i.e. poly1305(d) | xchacha20[k](d).
-                  An all-zeroes nonce is used, as each key is only used once.
-
- # Before:
-    Client knows:  K, A, Ap, Bp
-    Server knows:  K, B, Bp
-
- # Protocol:
-    0. (client generates key-pair a/ap, server generates b/bp)
-    1. client challenge :  hmac[K](ap) | ap
-    2. server challenge :  hmac[K](bp) | bp
-    3. client auth      :  box[K | a·b | a·B](H)   ... where H = sign[A](K | Bp | hash(a·b)) | Ap
-    4. server ack       :  box[K | a·b | a·B | A·b](sign[B](K | H | hash(a·b)))
-
- # Afterwards:
-    Server now knows:       Ap  ... the client's identity
-    Both now know:          SS = K | a·b | a·B | A·b   ...the shared secret
-
-    Now they can communicate using the following keys/nonces:
-    Client encryption key:  hash(hash(hash(SS)) | Bp)
-    Client nonce:           hmac[K](bp)   [only 1st 24 bytes needed]
-    Server encryption key:  hash(hash(hash(SS)) | Ap)
-    Server nonce:           hmac[K](ap)   [only 1st 24 bytes needed]
-
- # Compatibility Notes
-    There are several discrepancies between the the original protocol design published in the paper
-    and the existing implementations. This documentation and code follow the implementations,
-    for compatibility purposes.
-    * Step 1: The paper has the client send `ap | hmac[K](ap)`, i.e. public key first, not last.
-    * Step 2: The paper has the server send `bp | hmac[K | a·b](bp)`;
-      see <https://github.com/auditdrivencrypto/secret-handshake/issues/7>.
-      Dominic Tarr: "I was reluctant to change it since it didn't have security implications,
-      and also changing things was hard."
-    * Step 3: The paper defines H as `Ap | sign[A](K | Bp | hash(a·b))`, i.e. putting the
-      public key before the signature, not after it.
- */
+/* Follow along with CheatSheet.md! The variable names here follow the same terminology. */
 
 
 namespace snej::shs::impl {
@@ -97,7 +40,7 @@ namespace snej::shs::impl {
     struct sha512256 : public byte_array<32> { };
 
     static inline sha512256 hmac(byte_array<32> const& key, input_bytes in) {
-        // HMAC-SHA-512-256 is just the first 256 bits of HMAC-SHA-512.
+        // (HMAC-SHA-512-256 is just the first 256 bits of HMAC-SHA-512.)
         auto h = monocypher::hash<monocypher::SHA512>::createMAC(in, key);
         return reinterpret_cast<sha512256&>(h.range<0, 32>());
     }
@@ -107,11 +50,14 @@ namespace snej::shs::impl {
     }
 
     static inline box_key makeBoxKey(input_bytes keyMaterial) {
+        // The algorithm generates crypto-box keys by running the key material through SHA-256.
         return box_key(hash(keyMaterial));
     }
 
     template <size_t InputSize>
     byte_array<InputSize+16> box(box_key const& key, byte_array<InputSize> const& plaintext) {
+        // This hardcodes an all-zeroes nonce, which is only safe because the protocol uses each
+        // key only once!
         return key.box<InputSize+16>(monocypher::session::nonce(0), plaintext);
     }
 
