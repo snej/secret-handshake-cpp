@@ -1,51 +1,60 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(SecretHandshakeCapnP)
+project(SecretHandshakeCpp)
 
+add_subdirectory(vendor/monocypher-cpp)
 
 set(CMAKE_CXX_STANDARD 17)
 
+
+include_directories(
+    include
+    vendor/monocypher-cpp/include
+)
+
+
+#### LIBRARY
+
+add_library( SecretHandshakeCpp STATIC
+    src/shs.cc
+    src/SecretHandshake.cc
+    src/SecretStream.cc
+)
+target_link_libraries( SecretHandshakeCpp INTERFACE
+    MonocypherCpp
+)
+
+#### TESTS
+
 if(APPLE)
+    # Just for libSodium, used by shs1.c in the tests
     include_directories(SYSTEM PUBLIC
         /opt/homebrew/include
     )
-    link_directories(PRIVATE
+    link_directories(
         /opt/homebrew/lib   # ditto
     )
 endif()
 
-
-add_library( SecretHandshakeCpp STATIC
-    SecretHandshake.cc
-    SecretStream.cc
+add_executable( SecretHandshakeTests
+    tests/shsTests.cc
+    tests/SecretHandshakeTests.cc
     vendor/shs1-c/src/shs1.c
 )
-
-target_include_directories( SecretHandshakeCpp PRIVATE
+target_include_directories( SecretHandshakeTests PRIVATE
     vendor/shs1-c/src/
-)
-
-
-add_executable( Tests
-    SecretHandshakeTests.cc
-)
-target_compile_definitions( Tests PRIVATE
-    CATCH_CONFIG_MAIN
-)
-target_include_directories( Tests PRIVATE
     vendor/catch2
 )
-
-target_link_libraries( Tests PRIVATE
+target_link_libraries( SecretHandshakeTests PRIVATE
     SecretHandshakeCpp
-    sodium
+    sodium                  # used by shs1-c
 )
 
-install(TARGETS Tests)
+install(TARGETS SecretHandshakeTests)
 
 enable_testing()
 
 add_test(
     NAME tests
-    COMMAND Tests
+    COMMAND SecretHandshakeTests
 )

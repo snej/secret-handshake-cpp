@@ -48,8 +48,12 @@ namespace snej::shs::impl {
 
 
     /// Low-level implementation of SecretHandshake crypto operations.
+    /// You will probably prefer to use the API in SecretHandshake.hh!
     class handshake {
     public:
+        /// Initialize with the app ID (which both peers must know), and your long-term Ed25519
+        /// key-pair.
+        /// If you're the client (initiator), you must next call `setServerPublicKey`.
         handshake(app_id const& appID,
                   signing_key const& longTermSigningKey,
                   public_key const& longTermPublicKey);

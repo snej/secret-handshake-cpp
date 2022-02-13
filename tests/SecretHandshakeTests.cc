@@ -27,7 +27,10 @@
 #include "SecretHandshake.hh"
 #include "SecretStream.hh"
 #include "monocypher/base.hh"
+#include "hexString.hh"
 #include <iostream>
+
+#define CATCH_CONFIG_MAIN
 
 #include "catch.hpp"        // https://github.com/catchorg/Catch2
 
@@ -38,20 +41,6 @@ using namespace snej::shs;
 template <size_t SIZE>
 static void randomize(std::array<uint8_t,SIZE> &array) {
     monocypher::randomize(array.data(), SIZE);
-}
-
-static string hexString(const void *buf, size_t size) {
-    string hex;
-    hex.resize(2 * size);
-    char *dst = hex.data();
-    for (size_t i = 0; i < size; i++)
-        dst += sprintf(dst, "%02x", ((const uint8_t*)buf)[i]);
-    return hex;
-}
-
-template <size_t Size>
-string hexString(const std::array<uint8_t,Size> &a) {
-    return hexString(a.data(), Size);
 }
 
 
@@ -73,7 +62,7 @@ TEST_CASE("AppID", "[SecretHandshake]") {
     id = Context::appIDFromString("ABCDEF");
     CHECK(hexString(id) == "4142434445460000000000000000000000000000000000000000000000000000");
     id = Context::appIDFromString("A string that is too long to fit in an AppID");
-    CHECK(hexString(id) == "4120737472696e67207468617420697320746f6f206c6f6e6720746f20666974");
+    CHECK(hexString(id) == "4120737472696E67207468617420697320746F6F206C6F6E6720746F20666974");
 }
 
 

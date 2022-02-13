@@ -17,14 +17,13 @@
 //
 
 #include "shs.hh"
+#include "hexString.hh"
 
 extern "C" {
 #include "shs1.h"
 }
 
 #include <iostream>
-#include "IOUtil.hh"
-
 #include "catch.hpp"        // https://github.com/catchorg/Catch2
 
 using namespace std;
@@ -52,14 +51,14 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
     app_id appID;
     strcpy((char*)&appID, "shsTests");
 
-    cout << "Client pub key:     " << tendril::hexString(clientPK) << endl;
-    cout << "Client sec key:     " << tendril::hexString(clientSK) << endl;
-    cout << "Client eph pub key: " << tendril::hexString(clientEphPK) << endl;
-    cout << "Client eph sec key: " << tendril::hexString(clientEphSK) << endl;
-    cout << "Server pub key:     " << tendril::hexString(serverPK) << endl;
-    cout << "Server sec key:     " << tendril::hexString(serverSK) << endl;
-    cout << "Server eph pub key: " << tendril::hexString(serverEphPK) << endl;
-    cout << "Server eph sec key: " << tendril::hexString(serverEphSK) << endl;
+    cout << "Client pub key:     " << hexString(clientPK) << endl;
+    cout << "Client sec key:     " << hexString(clientSK) << endl;
+    cout << "Client eph pub key: " << hexString(clientEphPK) << endl;
+    cout << "Client eph sec key: " << hexString(clientEphSK) << endl;
+    cout << "Server pub key:     " << hexString(serverPK) << endl;
+    cout << "Server sec key:     " << hexString(serverSK) << endl;
+    cout << "Server eph pub key: " << hexString(serverEphPK) << endl;
+    cout << "Server eph sec key: " << hexString(serverEphSK) << endl;
 
 
     handshake client(appID, clientSK, clientPK);
@@ -79,8 +78,8 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
     ChallengeData clientCh, cClientCh;
     clientCh = client.createChallenge();
     shs1_create_client_challenge(cClientCh.data(), &cClient);
-    cout << "C++ client challenge: " << tendril::hexString(clientCh) << endl;
-    cout << "C   client challenge: " << tendril::hexString(cClientCh) << endl;
+    cout << "C++ client challenge: " << hexString(clientCh) << endl;
+    cout << "C   client challenge: " << hexString(cClientCh) << endl;
     REQUIRE(clientCh == cClientCh);
 
     cout << "\n2. Verify Client Challenge\n";
@@ -91,8 +90,8 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
     ChallengeData serverCh, cServerCh;
     serverCh = server.createChallenge();
     shs1_create_server_challenge(cServerCh.data(), &cServer);
-    cout << "C++ server challenge: " << tendril::hexString(serverCh) << endl;
-    cout << "C   server challenge: " << tendril::hexString(cServerCh) << endl;
+    cout << "C++ server challenge: " << hexString(serverCh) << endl;
+    cout << "C   server challenge: " << hexString(cServerCh) << endl;
     REQUIRE(serverCh == cServerCh);
 
     cout << "\n4. Verify Server Challenge\n";
@@ -103,8 +102,8 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
     ClientAuthData clientAuth, cClientAuth;
     clientAuth = client.createClientAuth();
     shs1_create_client_auth(cClientAuth.data(), &cClient);
-    cout << "C++ client auth: " << tendril::hexString(clientAuth) << endl;
-    cout << "C   client auth: " << tendril::hexString(cClientAuth) << endl;
+    cout << "C++ client auth: " << hexString(clientAuth) << endl;
+    cout << "C   client auth: " << hexString(cClientAuth) << endl;
     REQUIRE(clientAuth == cClientAuth);
 
     cout << "\n4. Verify Client Auth\n";
@@ -115,8 +114,8 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
     ServerAckData serverAck, cServerAck;
     serverAck = server.createServerAck();
     shs1_create_server_ack(cServerAck.data(), &cServer);
-    cout << "C++ server ack: " << tendril::hexString(serverAck) << endl;
-    cout << "C   server ack: " << tendril::hexString(cServerAck) << endl;
+    cout << "C++ server ack: " << hexString(serverAck) << endl;
+    cout << "C   server ack: " << hexString(cServerAck) << endl;
     REQUIRE(serverAck == cServerAck);
 
     cout << "\n5. Verify Server Ack\n";
@@ -140,21 +139,21 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
     auto &cClientEncNonce = *(nonce*)cClientOut.encryption_nonce;
     auto &cClientDecNonce = *(nonce*)cClientOut.decryption_nonce;
 
-    cout << "C++ client enc key: " << tendril::hexString(clientEncKey) << endl;
-    cout << "C++ server dec key: " << tendril::hexString(serverDecKey) << endl;
-    cout << "C   client enc key: " << tendril::hexString(cClientEncKey) << endl;
+    cout << "C++ client enc key: " << hexString(clientEncKey) << endl;
+    cout << "C++ server dec key: " << hexString(serverDecKey) << endl;
+    cout << "C   client enc key: " << hexString(cClientEncKey) << endl;
 
-    cout << "C++ client enc non: " << tendril::hexString(clientEncNonce) << endl;
-    cout << "C++ server dec non: " << tendril::hexString(serverDecNonce) << endl;
-    cout << "C   client enc non: " << tendril::hexString(cClientEncNonce) << endl;
+    cout << "C++ client enc non: " << hexString(clientEncNonce) << endl;
+    cout << "C++ server dec non: " << hexString(serverDecNonce) << endl;
+    cout << "C   client enc non: " << hexString(cClientEncNonce) << endl;
 
-    cout << "C++ client dec key: " << tendril::hexString(clientDecKey) << endl;
-    cout << "C++ server enc key: " << tendril::hexString(serverEncKey) << endl;
-    cout << "C   client dec key: " << tendril::hexString(cClientDecKey) << endl;
+    cout << "C++ client dec key: " << hexString(clientDecKey) << endl;
+    cout << "C++ server enc key: " << hexString(serverEncKey) << endl;
+    cout << "C   client dec key: " << hexString(cClientDecKey) << endl;
 
-    cout << "C++ client dec non: " << tendril::hexString(clientDecNonce) << endl;
-    cout << "C++ server enc non: " << tendril::hexString(serverEncNonce) << endl;
-    cout << "C   client dec non: " << tendril::hexString(cClientDecNonce) << endl;
+    cout << "C++ client dec non: " << hexString(clientDecNonce) << endl;
+    cout << "C++ server enc non: " << hexString(serverEncNonce) << endl;
+    cout << "C   client dec non: " << hexString(cClientDecNonce) << endl;
 
     REQUIRE(clientEncKey == serverDecKey);
     REQUIRE(clientEncNonce == serverDecNonce);

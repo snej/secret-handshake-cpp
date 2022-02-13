@@ -1,57 +1,51 @@
-#  SecretHandshake For Cap’n Proto
+#  SecretHandshake Protocol Implementation In C++
 
-C++ adapter for using the [SecretHandshake](https://github.com/auditdrivencrypto/secret-handshake) protocol with the awesome [Cap’n Proto](https://capnproto.org/) RPC library.  
-SecretHandshake upgrades your network connections with encryption and _mutual_ authentication, without all the overhead of using TLS.
+This is a C++ implementation of the [SecretHandshake](https://github.com/auditdrivencrypto/secret-handshake) protocol. SecretHandshake upgrades your network connections with encryption and _mutual_ authentication, without all the overhead of using TLS.
 
-(You don’t actually need Cap’n Proto to use this, but you’d need to provide your own networking code.)
+There is also some glue code in the [capnproto](capnproto/README.md) subdirectory to use SecretHandshake with the awesome [Cap’n Proto](https://capnproto.org/) RPC library.
 
 ## About SecretHandshake
 
-**SecretHandshake** is “a mutually authenticating key agreement handshake, with forward secure identity metadata.” It was designed by Dominic Tarr and is used in the [Secure Scuttlebutt](https://scuttlebutt.nz) P2P social network.
+**SecretHandshake** is “a mutually authenticating key agreement handshake, with forward secure identity metadata.” It was designed by Dominic Tarr and is used in the [Secure Scuttlebutt](https://scuttlebutt.nz) P2P social network. There’s a [design paper](http://dominictarr.github.io/secret-handshake-paper/shs.pdf) that presents the algorithm in detail.
 
-It’s based on 256-bit Ed25519 key-pairs. Each peer needs to maintain a long-term key pair, whose public key serves as its global identifier. The peer making the connection (the “client”) must know the public key of the other peer (“server”) to be able to connect. The server learns the client’s public key during the handshake. Each peer proves to the other that it knows its matching private key. Much more detail is available in the [design paper](http://dominictarr.github.io/secret-handshake-paper/shs.pdf).
+It’s based on 256-bit Ed25519 key-pairs. Each peer needs to maintain a long-term key pair, whose public key serves as its global identifier. The peer making the connection (the “client”) must know the public key of the other peer (“server”) to be able to connect. 
 
-The handshake also produces two 256-bit session keys, known to both peers but otherwise secret, which are then used to encrypt the TCP streams via the symmetric XSalsa20 cipher, using libSodium’s “secret box” API. (This is not strictly speaking part of the SecretHandshake protocol, which ends after key agreement. It is very similar to the stream encryption used by Scuttlebutt.)
+The handshake happens when the socket opens. The peers alternate sending and receiving four cryptographic blobs of about 100 bytes each. The server learns the client’s public key during the handshake, and each peer proves to the other that it knows its matching private key. 
+
+The handshake also produces two 256-bit session keys and 192-bit nonces, known to both peers but otherwise secret, which are then used to encrypt the two TCP streams. (This is not strictly speaking part of the SecretHandshake protocol, which ends after key agreement.)
+
+The API in `SecretStream.hh` provides stream encryption using those keys. It supports both Scuttlebutt's "box-stream" protocol based on XSalsa20, and a more compact custom protocol using XChaCha20.
 
 ## Implementation & Use
 
-This library is built atop the existing [shs1-c](https://github.com/sunrise-choir/shs1-c) library, a plain C implementation of Secret-Handshake, which in turn uses crypto functions from the ubiquitous [libSodium](https://github.com/jedisct1/libsodium).
+*None of the code here implements networking!* It expects you to open sockets and tell it the data you read, and it will tell you what to send.
 
-My C++ API here has four layers. From top to bottom:
+- **SecretHandshake** tells you what “challenge” bytes to send, and then expects you to tell it what you got in response. Assuming the handshake succeeds, it gives you a `Session` object containing the keys.
+  - **shs** is a lower-level class used by `SecretHandshake`, focusing on the crypto.
+- **SecretStream** provides classes that use the keys in the `Session` object to encrypt/decrypt either discrete messages or continuous byte streams.
 
-- **SecretRPC** provides high-level RPC client and server classes that mimic Cap’n Proto’s `EzRpcClient`/`Server` classes, but use SecretConnection.
-- **SecretConnection** exposes a `StreamWrapper` class that takes a Cap’n Proto `AsyncIoStream` and returns a new `AsyncIoStream` that internally performs the SecretHandshake and the SecretStream encryption.
-- **SecretStream** provides classes that use the session keys to encrypt/decrypt either messages or continuous byte streams.
-- **SecretHandshake** itself is purely computational; it just tells you what “challenge” bytes to send, and then expects you to tell it what you got in response. It's just a friendlier, idiomatic C++ API on [shs1-c](https://github.com/sunrise-choir/shs1-c). 
-
-If you currently use Cap'n Proto `EzRpc` you should be able to drop in `SecretRPC` pretty easily. You’ll just need to use the `SecretKey` class to generate a key-pair, and persist it somehow. (Hint: put the secret key someplace secure, like the Mac/iOS Keychain.)
-
-If you use lower-level Cap’n Proto classes to create connections, you’ll need to use the classes in SecretConnection to wrap your plain-TCP `AsyncIOStream` with the secure one. You can look at the code in `SecretRPC.cc` for clues.
-
-Even if you don’t use Cap’n Proto at all, you can use the classes in SecretHandshake and SecretStream to implement authenticated encryption on top of whatever network streams you’re using.
+The crypto primitives themselves come from [Monocypher](https://monocypher.org), a small C crypto library, as wrapped by my own [MonocypherCpp](https://github.com/snej/monocypher-cpp) C++ API.
 
 ## Building
 
-There isn’t a makefile. ¯\\\_(ツ)\_/¯ Just compile the top-level .cc files (except the tests) with C++17 or later, and also `vendor/shs1-c/shs1.c` as C99. Add `vendor/shs1-c/` to the header search path. You’ll also need to [install libSodium](https://libsodium.gitbook.io/doc/installation) and make sure it’s in the system header search path.
+*Make sure to check out submodules. Recursively. Otherwise you will get mucho build errors.*
 
-There are some unit tests in `SecretHandshakeTests.cc`. They use the [Catch2](https://github.com/catchorg/Catch2) unit test framework. 
+A simple CMake build file is supplied. Or you can use your own build system: just compile the files in `src` and `vendor/monocypher-cpp/src`, and add `include` and `vendor/monocypher/include` to the preprocessor's header path.
 
-If someone wants to write a CMake build file, I’ll gratefully accept it.
+There are some unit tests in `SecretHandshakeTests.cc`. They use the [Catch2](https://github.com/catchorg/Catch2) unit test framework. Some of the tests use an existing C implementation of SecretHandshake for validation; that code in turn requires libSodium, so to run the tests you'll need to [install libSodium](https://libsodium.gitbook.io/doc/installation) and make sure it’s in the system header search path. But that's not necessary if you only want to build the library.
 
 ## Status
 
-As of January 2021, this is pretty new and minimally tested. It does work, in an app I’m developing, but there are no unit tests.
+As of February 2022, this is pretty new and minimally tested. It does work, in an app I’m developing, but there are no unit tests.
 
 It’s only been built with Clang 12 (Xcode 13.1), and only run on macOS 12.
 
 I’ll update this notice as things get more solid.
 
-In the long run I would like to replace shs1.c with equivalent code based on Monocypher. That's because I already use Monocypher in the rest of my code (it's considerably smaller than libSodium), and because I don't want the clumsiness of having to quarantine shs1.c in a shared library to avoid LGPL encumberment.
-
 ## License
 
-The code in this repo is provided under the MIT license (like Cap’n Proto.)
+The code in this repo is provided under the MIT license.
 
-The shs-1 submodule is LGPL-licensed. _(🚨 This has licensing implications for any code you statically link it with. If you don’t want that, be sure to build it as a shared library and dynamically link it.)_
+Monocypher uses the 2-clause BSD license.
 
-libSodium uses the ISC license.
+The code in the `shs-1` submodule is LGPL-licensed, but since it is only used in the tests (`shsTests.cc`) it has no effect on the licensing of the library itself.

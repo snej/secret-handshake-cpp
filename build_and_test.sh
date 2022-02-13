@@ -3,5 +3,5 @@
 mkdir -p build_cmake
 cd build_cmake
 cmake ..
-make Tests
-./Tests
+make -j 8 SecretHandshakeTests
+./SecretHandshakeTests

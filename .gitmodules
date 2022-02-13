@@ -1,3 +1,6 @@
 [submodule "vendor/shs1-c"]
 	path = vendor/shs1-c
 	url = https://github.com/sunrise-choir/shs1-c.git
+[submodule "vendor/monocypher-cpp"]
+	path = vendor/monocypher-cpp
+	url = https://github.com/snej/monocypher-cpp.git
