@@ -29,10 +29,12 @@ target_link_libraries( SecretHandshakeCpp INTERFACE
 if(APPLE)
     # Just for libSodium, used by shs1.c in the tests
     include_directories(SYSTEM PUBLIC
+        /usr/local/include
         /opt/homebrew/include
     )
     link_directories(
-        /opt/homebrew/lib   # ditto
+        /usr/local/lib
+        /opt/homebrew/lib
     )
 endif()
 
