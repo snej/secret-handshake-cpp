@@ -37,6 +37,8 @@ if(APPLE)
 endif()
 
 add_executable( SecretHandshakeTests
+    vendor/monocypher-cpp/tests/tests_main.cc
+    vendor/monocypher-cpp/tests/MonocypherCppTests.cc
     tests/shsTests.cc
     tests/SecretHandshakeTests.cc
     vendor/shs1-c/src/shs1.c
@@ -44,17 +46,9 @@ add_executable( SecretHandshakeTests
 target_include_directories( SecretHandshakeTests PRIVATE
     vendor/shs1-c/src/
     vendor/catch2
+    vendor/monocypher-cpp/tests/
 )
 target_link_libraries( SecretHandshakeTests PRIVATE
     SecretHandshakeCpp
     sodium                  # used by shs1-c
-)
-
-install(TARGETS SecretHandshakeTests)
-
-enable_testing()
-
-add_test(
-    NAME tests
-    COMMAND SecretHandshakeTests
 )

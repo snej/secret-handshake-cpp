@@ -30,9 +30,7 @@
 #include "hexString.hh"
 #include <iostream>
 
-#define CATCH_CONFIG_MAIN
-
-#include "catch.hpp"        // https://github.com/catchorg/Catch2
+#include "catch.hpp"
 
 using namespace std;
 using namespace snej::shs;
@@ -58,11 +56,11 @@ TEST_CASE("SecretKey", "[SecretHandshake]") {
 
 TEST_CASE("AppID", "[SecretHandshake]") {
     AppID id = Context::appIDFromString("");
-    CHECK(hexString(id) == "0000000000000000000000000000000000000000000000000000000000000000");
+    CHECK(hexString(id) == "00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000");
     id = Context::appIDFromString("ABCDEF");
-    CHECK(hexString(id) == "4142434445460000000000000000000000000000000000000000000000000000");
+    CHECK(hexString(id) == "41424344 45460000 00000000 00000000 00000000 00000000 00000000 00000000");
     id = Context::appIDFromString("A string that is too long to fit in an AppID");
-    CHECK(hexString(id) == "4120737472696E67207468617420697320746F6F206C6F6E6720746F20666974");
+    CHECK(hexString(id) == "41207374 72696E67 20746861 74206973 20746F6F 206C6F6E 6720746F 20666974");
 }
 
 
