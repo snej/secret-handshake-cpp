@@ -12,10 +12,15 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        os: [ubuntu-latest, macOS-latest]  # TODO: Restore windows-latest (how to install libsodium?)
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Get Package
+        uses: mstksg/get-package@v1
+        with:
+          brew: libsodium
+          apt-get: libsodium-dev
       - name: checkout
         uses: actions/checkout@v2
       - name: checkout submodules
