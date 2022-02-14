@@ -27,6 +27,18 @@
 #include "SecretStream.hh"
 #include <sodium.h>
 #include <stdexcept>
+#include <string.h>
+#include <assert.h>
+
+
+#define _UNUSED
+#ifdef __has_attribute
+#  if __has_attribute(unused)
+#    undef _UNUSED
+#    define _UNUSED __attribute__((unused))
+#  endif
+#endif
+
 
 namespace snej::shs {
 
@@ -217,7 +229,7 @@ namespace snej::shs {
         _buffer.resize(_processedBytes + encryptedSize(msgSize));
         input_data in = {&_buffer[_processedBytes], msgSize};
         output_buffer out = {(void*)in.data, _buffer.size() - _processedBytes};
-        __unused auto status = encrypt(in, out);
+        _UNUSED auto status = encrypt(in, out);
         assert(status == Success);
         _processedBytes += out.size;
         _buffer.resize(_processedBytes);

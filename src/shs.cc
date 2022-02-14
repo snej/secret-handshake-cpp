@@ -30,6 +30,15 @@
 /* Follow along with CheatSheet.md! The variable names here follow the same terminology. */
 
 
+#define _UNUSED
+#ifdef __has_attribute
+#  if __has_attribute(unused)
+#    undef _UNUSED
+#    define _UNUSED __attribute__((unused))
+#  endif
+#endif
+
+
 namespace snej::shs::impl {
     using namespace std;
 
@@ -166,12 +175,12 @@ namespace snej::shs::impl {
 
 
 #define WITH_CLIENT_VARS \
-    __unused auto &A  = _X;\
-    __unused auto &Ap = _Xp;\
-    __unused auto &Bp = _Yp.value();\
-    __unused auto &a  = _x;\
-    __unused auto &ap = _xp;\
-    __unused auto &bp = _yp.value();
+    _UNUSED auto &A  = _X;\
+    _UNUSED auto &Ap = _Xp;\
+    _UNUSED auto &Bp = _Yp.value();\
+    _UNUSED auto &a  = _x;\
+    _UNUSED auto &ap = _xp;\
+    _UNUSED auto &bp = _yp.value();
 
 
     void handshake::setServerPublicKey(const public_key &pk) {
@@ -208,12 +217,12 @@ namespace snej::shs::impl {
 
 
 #define WITH_SERVER_VARS \
-        __unused auto &B  = _X;\
-        __unused auto &Bp = _Xp;\
-        __unused auto &Ap = _Yp;\
-        __unused auto &b  = _x;\
-        __unused auto &bp = _xp;\
-        __unused auto &ap = _yp.value();\
+        _UNUSED auto &B  = _X;\
+        _UNUSED auto &Bp = _Xp;\
+        _UNUSED auto &Ap = _Yp;\
+        _UNUSED auto &b  = _x;\
+        _UNUSED auto &bp = _xp;\
+        _UNUSED auto &ap = _yp.value();\
 
 
     // auth = box[K | a·b | a·B](H)   ... where H = sign[A](K | Bp | hash(a·b)) | Ap
