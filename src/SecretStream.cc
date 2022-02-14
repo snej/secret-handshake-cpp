@@ -25,7 +25,8 @@
 //
 
 #include "SecretStream.hh"
-#include <sodium.h>
+#include "shs.hh"
+#include "monocypher/encryption.hh"
 #include <stdexcept>
 #include <string.h>
 #include <assert.h>
@@ -41,18 +42,22 @@
 
 
 namespace snej::shs {
+    using box_stream_key = monocypher::session::encryption_key<monocypher::ext::XSalsa20_Poly1305>;
+    using compact_key    = monocypher::session::key;
+    using session_nonce  = monocypher::session::nonce;
 
-    static_assert(sizeof(SessionKey) == crypto_secretbox_KEYBYTES);
-    static_assert(sizeof(Nonce)      == crypto_secretbox_NONCEBYTES);
+    static_assert(sizeof(SessionKey) == sizeof(box_stream_key));
+    static_assert(sizeof(SessionKey) == sizeof(compact_key));
+    static_assert(sizeof(Nonce)      == sizeof(session_nonce));
 
-    using MAC               = std::array<uint8_t,crypto_secretbox_MACBYTES>;
-    using BoxStreamHeader   = std::array<uint8_t,2+crypto_secretbox_MACBYTES>;
+    using MAC               = monocypher::session::mac;
 
+    struct BoxStreamHeader {
+        uint8_t size_be[2];
+        MAC     mac;
+    };
 
-    static Nonce& operator++ (Nonce &nonce) {
-        sodium_increment(nonce.data(), nonce.size());
-        return nonce;
-    }
+    static_assert(sizeof(BoxStreamHeader) == 2 + sizeof(MAC));
 
 
     size_t CryptoBox::encryptedSize(size_t inputSize) {
@@ -73,30 +78,25 @@ namespace snej::shs {
         // Encrypt:
         out.size = encSize;
         auto dst = (uint8_t*)out.data;
+        auto &nonce = (session_nonce&)_session.encryptionNonce;
         if (_protocol == BoxStream) {
             // Create a header buffer that starts with the cleartext length:
+            auto &key = (const box_stream_key&)_session.encryptionKey;
             BoxStreamHeader header;
-            header[0] = (in.size >> 8) & 0xFF;
-            header[1] = in.size & 0xFF;
+            header.size_be[0] = (in.size >> 8) & 0xFF;
+            header.size_be[1] = in.size & 0xFF;
             // Encrypt the message. Ciphertext goes into `out`, MAC goes into the header:
-            crypto_secretbox_detached(dst + sizeof(MAC) + sizeof(header), // ->ciphertext
-                                      &header[2],                         // ->MAC
-                                      (const uint8_t*)in.data, in.size,   // cleartext
-                                      _session.encryptionNonce.data(),    // nonce
-                                      _session.encryptionKey.data());     // key
-            ++_session.encryptionNonce;
+            auto ciphertextp = dst + sizeof(header) + sizeof(MAC);
+            header.mac = key.lock(nonce, {in.data, in.size}, ciphertextp);
+            ++nonce;
             // Now encrypt the header and put it at the start of the output:
-            crypto_secretbox_easy(dst,                                    // ->ciphertext
-                                  header.data(), header.size(),           // cleartext
-                                  _session.encryptionNonce.data(),        // nonce
-                                  _session.encryptionKey.data());         // key
-            ++_session.encryptionNonce;
+            key.box(nonce, {&header, sizeof(header)}, {dst, encSize});
+            ++nonce;
         } else {
-            crypto_secretbox_easy(dst + 2,                                // ->ciphertext
-                                  (const uint8_t*)in.data, in.size,       // cleartext
-                                  _session.encryptionNonce.data(),        // nonce
-                                  _session.encryptionKey.data());         // key
-            ++_session.encryptionNonce;
+            // Simpler protocol -- just plaintext size + box
+            auto &key = (const compact_key&)_session.encryptionKey;
+            key.box(nonce, {in.data, in.size}, {dst + 2, encSize - 2});
+            ++nonce;
 
             // Now write the byte count at the start:
             encSize -= 2;  // don't include the size of the byte-count in the byte-count
@@ -113,17 +113,17 @@ namespace snej::shs {
     {
         if (in.size < sizeof(MAC) + sizeof(header))
             return {CryptoBox::IncompleteInput, 0};
-        // The nonce has to be incremented, because on the sending side the header was the
+        // The nonce has to be incremented first, because on the sending side the header was the
         // second thing to be encrypted. But leave the session's nonce alone for now.
-        Nonce nonce = session.decryptionNonce;
+        auto &key = (const box_stream_key&)session.decryptionKey;
+        auto nonce = (session_nonce&)session.decryptionNonce;
         ++nonce;
-        if (0 != crypto_secretbox_open_easy(header.data(),
-                                            (const uint8_t*)in.data,
-                                            sizeof(MAC) + sizeof(header),
-                                            nonce.data(),
-                                            session.decryptionKey.data()))
+        auto out = key.unbox(nonce,
+                             {in.data, sizeof(MAC) + sizeof(header)},
+                             {&header, sizeof(header)});
+        if (out.size != sizeof(header))
             return {CryptoBox::CorruptData, 0};
-        return {CryptoBox::Success, (size_t(header[0]) << 8) | header[1]};
+        return {CryptoBox::Success, (size_t(header.size_be[0]) << 8) | header.size_be[1]};
     }
 
 
@@ -147,6 +147,7 @@ namespace snej::shs {
         auto src = (const uint8_t*)in.data;
         CryptoBox::status stat;
         size_t msgSize, encSize;
+        auto &nonce = (session_nonce&)_session.decryptionNonce;
         if (_protocol == BoxStream) {
             BoxStreamHeader header;
             std::tie(stat, msgSize) = decryptBoxStreamHeader(in, header, _session);
@@ -155,14 +156,13 @@ namespace snej::shs {
             encSize = encryptedSize(msgSize);
             if (in.size < encSize)
                 return IncompleteInput;
-            if (0 != crypto_secretbox_open_detached((uint8_t*)out.data,                // ->output
-                                                    src + sizeof(MAC) + sizeof(header),// ciphertext
-                                                    &header[2],                        // MAC
-                                                    msgSize,                           // ciphertext len
-                                                    _session.decryptionNonce.data(),   // nonce
-                                                    _session.decryptionKey.data()))    // key
+
+            auto &key = (const box_stream_key&)_session.decryptionKey;
+            if (!key.unlock(nonce, header.mac,
+                            {src + sizeof(MAC) + sizeof(header), msgSize},      // ciphertext
+                            out.data))                                          // output plaintext
                 return CorruptData;
-            ++_session.decryptionNonce; // extra increment due to 2nd decryption
+            ++nonce; // extra increment due to 2nd decryption
         } else {
             std::tie(stat, msgSize) = getDecryptedSize(in);
             if (stat != Success)
@@ -173,13 +173,11 @@ namespace snej::shs {
             if (out.size < msgSize)
                 return OutTooSmall;
 
-            if (0 != crypto_secretbox_open_easy((uint8_t*)out.data,                 // ->output
-                                                src + 2, encSize - 2,               // ciphertext, size
-                                                _session.decryptionNonce.data(),    // nonce
-                                                _session.decryptionKey.data()))     // key
+            auto &key = (const compact_key&)_session.decryptionKey;
+            if (key.unbox(nonce, {src + 2, encSize - 2}, {out.data, out.size}).size != msgSize)
                 return CorruptData;
         }
-        ++_session.decryptionNonce;
+        ++nonce;
         out.size = msgSize;
         in.data = src + encSize;
         in.size -= encSize;
