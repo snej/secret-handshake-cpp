@@ -33,6 +33,8 @@ namespace snej::shs::impl {
     using public_key     = monocypher::public_key<monocypher::Ed25519>;
     using signature      = signing_key::signature;
 
+    using key_exchange   = monocypher::key_exchange<monocypher::X25519_Raw>;
+
     using ChallengeData  = byte_array<64>;
     using ClientAuthData = byte_array<112>;
     using ServerAckData  = byte_array<80>;
@@ -59,7 +61,7 @@ namespace snej::shs::impl {
                   public_key const& longTermPublicKey);
 
         /// Setting custom ephemeral keys is optional; typically only done by unit tests.
-        void setEphemeralKeys(signing_key const&, public_key const&);
+        void setEphemeralKeys(key_exchange const&);
 
         // The client must call these in order:
 
@@ -88,7 +90,6 @@ namespace snej::shs::impl {
         ChallengeData createChallenge();
         bool verifyChallenge(ChallengeData const&);
 
-        using key_exchange = monocypher::key_exchange<monocypher::X25519_Raw>;
         using kx_public_key = key_exchange::public_key;
         using kx_secret_key = key_exchange::secret_key;
         using kx_shared_secret = key_exchange::shared_secret;

@@ -43,7 +43,6 @@ namespace snej::shs::impl {
     using namespace std;
 
     using input_bytes = monocypher::input_bytes;
-    using key_exchange = handshake::key_exchange;
     using kx_shared_secret = handshake::kx_shared_secret;
     using kx_public_key = handshake::kx_public_key;
 
@@ -111,10 +110,9 @@ namespace snej::shs::impl {
     { }
 
 
-    void handshake::setEphemeralKeys(signing_key const& sk, public_key const& pk) {
-        _x = key_exchange((kx_secret_key&)sk);
+    void handshake::setEphemeralKeys(key_exchange const& kx) {
+        _x = kx;
         _xp = _x.get_public_key();
-        assert(_xp == pk);
     }
 
 
