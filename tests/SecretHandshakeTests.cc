@@ -145,12 +145,13 @@ struct SessionTest {
 };
 
 
-using getSizeResult = std::pair<CryptoBox::status, size_t>;
+using getSizeResult = std::pair<status, size_t>;
 
 
 TEST_CASE_METHOD(SessionTest, "Encrypted Messages", "[SecretHandshake]") {
     auto protocol = GENERATE(CryptoBox::Compact, CryptoBox::BoxStream);
-    CryptoBox box1(session1, protocol), box2(session2, protocol);
+    EncryptoBox box1(session1, protocol);
+    DecryptoBox box2(session2, protocol);
     cerr << "\t---- protocol=" << int(protocol) << endl;
 
     // Encrypt a message:
@@ -158,57 +159,52 @@ TEST_CASE_METHOD(SessionTest, "Encrypted Messages", "[SecretHandshake]") {
     input_data inClear = {kCleartext, strlen(kCleartext)};
 
     // Encrypt:
-    Nonce originalNonce = session1.encryptionNonce;
     uint8_t cipherBuf[256] = {};
     output_buffer outCipher = {cipherBuf, 0};
-    CHECK(box1.encrypt(inClear, outCipher) == CryptoBox::OutTooSmall);
+    CHECK(box1.encrypt(inClear, outCipher) == OutTooSmall);
     outCipher.size = inClear.size;
-    CHECK(box1.encrypt(inClear, outCipher) == CryptoBox::OutTooSmall);
+    CHECK(box1.encrypt(inClear, outCipher) == OutTooSmall);
     outCipher.size = box1.encryptedSize(inClear.size);
-    CHECK(box1.encrypt(inClear, outCipher) == CryptoBox::Success);
+    CHECK(box1.encrypt(inClear, outCipher) == Success);
     CHECK(outCipher.data == cipherBuf);
     CHECK(outCipher.size == box1.encryptedSize(inClear.size));
-    CHECK(session1.encryptionNonce != originalNonce);
 
     // Decrypt:
     uint8_t clearBuf[256] = {};
-    CHECK(box2.getDecryptedSize({cipherBuf, 0}) == getSizeResult{CryptoBox::IncompleteInput, 0});
-    CHECK(box2.getDecryptedSize({cipherBuf, 1}) == getSizeResult{CryptoBox::IncompleteInput, 0});
+    CHECK(box2.getDecryptedSize({cipherBuf, 0}) == getSizeResult{IncompleteInput, 0});
+    CHECK(box2.getDecryptedSize({cipherBuf, 1}) == getSizeResult{IncompleteInput, 0});
     if (protocol != CryptoBox::BoxStream) {
-        CHECK(box2.getDecryptedSize({cipherBuf, 2}) == getSizeResult{CryptoBox::Success, inClear.size});
+        CHECK(box2.getDecryptedSize({cipherBuf, 2}) == getSizeResult{Success, inClear.size});
     }
-    CHECK(box2.getDecryptedSize({cipherBuf, sizeof(cipherBuf)}) == getSizeResult{CryptoBox::Success, inClear.size});
+    CHECK(box2.getDecryptedSize({cipherBuf, sizeof(cipherBuf)}) == getSizeResult{Success, inClear.size});
 
     input_data inCipher = {cipherBuf, 0};
     output_buffer outClear = {clearBuf, sizeof(clearBuf)};
-    CHECK(box2.decrypt(inCipher, outClear) == CryptoBox::IncompleteInput);
+    CHECK(box2.decrypt(inCipher, outClear) == IncompleteInput);
     inCipher.size = 2;
-    CHECK(box2.decrypt(inCipher, outClear) == CryptoBox::IncompleteInput);
+    CHECK(box2.decrypt(inCipher, outClear) == IncompleteInput);
     inCipher.size = outCipher.size - 1;
-    CHECK(box2.decrypt(inCipher, outClear) == CryptoBox::IncompleteInput);
+    CHECK(box2.decrypt(inCipher, outClear) == IncompleteInput);
     inCipher.size = outCipher.size;
-    CHECK(box2.decrypt(inCipher, outClear) == CryptoBox::Success);
+    CHECK(box2.decrypt(inCipher, outClear) == Success);
     CHECK(inCipher.size == 0);
     CHECK(inCipher.data == &cipherBuf[outCipher.size]);
     CHECK(outClear.data == clearBuf);
     CHECK(outClear.size == inClear.size);
     CHECK(memcmp(kCleartext, outClear.data, outClear.size) == 0);
 
-    // Both nonces should still match:
-    CHECK(session1.encryptionNonce == session2.decryptionNonce);
-
     // Encrypt another message:
     constexpr const char *kMoreCleartext = "Alea jacta est";
     inClear = {kMoreCleartext, strlen(kMoreCleartext)};
     outCipher = {cipherBuf, sizeof(cipherBuf)};
-    CHECK(box1.encrypt(inClear, outCipher) == CryptoBox::Success);
+    CHECK(box1.encrypt(inClear, outCipher) == Success);
     CHECK(outCipher.data == cipherBuf);
     CHECK(outCipher.size == box1.encryptedSize(inClear.size));
 
     // Decrypt it:
     inCipher = {cipherBuf, sizeof(cipherBuf)};
     outClear = {clearBuf, sizeof(clearBuf)};
-    CHECK(box2.decrypt(inCipher, outClear) == CryptoBox::Success);
+    CHECK(box2.decrypt(inCipher, outClear) == Success);
     CHECK(inCipher.size == sizeof(cipherBuf) - outCipher.size);
     CHECK(inCipher.data == &cipherBuf[outCipher.size]);
     CHECK(outClear.data == clearBuf);
@@ -219,7 +215,8 @@ TEST_CASE_METHOD(SessionTest, "Encrypted Messages", "[SecretHandshake]") {
 
 TEST_CASE_METHOD(SessionTest, "Encrypted Messages Overlapping Buffers", "[SecretHandshake]") {
     auto protocol = GENERATE(CryptoBox::Compact, CryptoBox::BoxStream);
-    CryptoBox box1(session1, protocol), box2(session2, protocol);
+    EncryptoBox box1(session1, protocol);
+    DecryptoBox box2(session2, protocol);
     cerr << "\t---- protocol=" << int(protocol) << endl;
 
     // Check that it's OK to use the same buffer for the input and the output:
@@ -228,15 +225,15 @@ TEST_CASE_METHOD(SessionTest, "Encrypted Messages Overlapping Buffers", "[Secret
     strcpy(buffer, kCleartext);
     input_data inClear = {buffer, strlen(kCleartext)};
     output_buffer outCipher = {buffer, sizeof(buffer)};
-    CHECK(box1.encrypt(inClear, outCipher) == CryptoBox::Success);
+    CHECK(box1.encrypt(inClear, outCipher) == Success);
 
     if (protocol != CryptoBox::BoxStream) {
-        CHECK(box2.getDecryptedSize({buffer, 2}) == getSizeResult{CryptoBox::Success, inClear.size});
+        CHECK(box2.getDecryptedSize({buffer, 2}) == getSizeResult{Success, inClear.size});
     }
 
     input_data inCipher = {buffer, sizeof(buffer)};
     output_buffer outClear = {buffer, sizeof(buffer)};
-    CHECK(box2.decrypt(inCipher, outClear) == CryptoBox::Success);
+    CHECK(box2.decrypt(inCipher, outClear) == Success);
     CHECK(inCipher.size == sizeof(buffer) - outCipher.size);
     CHECK(inCipher.data == &buffer[outCipher.size]);
     CHECK(outClear.data == buffer);

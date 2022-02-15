@@ -90,8 +90,8 @@ namespace snej::shs {
         kj::Promise<void> connect() {
             return runHandshake().then([&](Session result) {
                 _session = result;
-                _encryptor.emplace(KJ_REQUIRE_NONNULL(_session));
-                _decryptor.emplace(KJ_REQUIRE_NONNULL(_session));
+                _encryptor.emplace(result.encryptionKey, result.encryptionNonce);
+                _decryptor.emplace(result.decryptionKey, result.decryptionNonce);
             });
         }
 

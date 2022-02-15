@@ -23,13 +23,18 @@ namespace snej::shs {
     };
 
 
+    /// Success or failure status of a `CryptoBox` / `CryptoStream` operation.
+    enum status {
+        Success,            ///< Encryption/decryption succeeded
+        OutTooSmall,        ///< The output's capacity is too small
+        IncompleteInput,    ///< Need more input data to decrypt
+        CorruptData         ///< The encrypted data is corrupted
+    };
 
-    /// Message-oriented encryption using keys & nonces from a Session:
-    /// - Encrypts a sequence of arbitrary-size blocks of data ("messages"). Each encrypted message
-    ///   is prefixed with its size and a MAC.
-    /// - Decrypts _entire messages_ in the same order they were sent. Reads the message size so it
-    ///   knows how big the full message is, and indicates whether the message is incomplete.
-    /// `EncryptionStream` and `DecryptionStream` wrap this to provide a byte-oriented stream API.
+
+
+    /// Message-oriented encryption using keys & nonces from a Session;
+    /// abstract base class of `EncryptoBox` and `DecryptoBox`.
     class CryptoBox {
     public:
         /// Data format to use for encrypted messages.
@@ -38,25 +43,43 @@ namespace snej::shs {
             BoxStream   ///< Scuttlebutt-compatible. More overhead, but msg lengths are encrypted.
         };
 
-        enum status {
-            Success,            ///< Encryption/decryption succeeded
-            OutTooSmall,        ///< The output's capacity is too small
-            IncompleteInput,    ///< Need more input data to decrypt
-            CorruptData         ///< The encrypted data is corrupted
-        };
+        /// Returns the encrypted size of a message. (It will be somewhat larger than the input.)
+        size_t encryptedSize(size_t inputSize);
 
-        /// Constructs a CryptoBox on a Session.
-        /// @note It keeps a pointer to the Session, which must remain valid.
-        explicit CryptoBox(Session &session, Protocol protocol =Compact)
-        :_session(session)
+        ~CryptoBox();
+
+    protected:
+        CryptoBox(SessionKey const& key, Nonce const& nonce, Protocol protocol =Compact)
+        :_key(key)
+        ,_nonce(nonce)
         ,_protocol(protocol)
         { }
 
+        struct BoxStreamHeader;
+
+        SessionKey const _key;
+        Nonce            _nonce;
+        Protocol const   _protocol;
+    };
+
+
+
+    /// Message-oriented encryption using keys & nonces from a Session.
+    /// Encrypts a sequence of arbitrary-size blocks of data ("messages"). Each encrypted message
+    /// is prefixed with its size and a MAC. The nonce is incremented after each message.
+    ///
+    /// `EncryptionStream` wraps this to provide a byte-oriented stream API.
+    class EncryptoBox : public CryptoBox {
+    public:
+        /// Constructs an `EncryptoBox` from an encryption key and nonce.
+        EncryptoBox(SessionKey const& key, Nonce const& nonce, Protocol protocol =Compact)
+        :CryptoBox(key, nonce, protocol) { }
+
+        explicit EncryptoBox(Session const& session, Protocol p =CryptoBox::Compact)
+        :EncryptoBox(session.encryptionKey, session.encryptionNonce, p) { }
+
         /// The maximum byte length of a message, before encryption.
         static constexpr size_t kMaxMessageSize = 0xFFFF;
-
-        /// Returns the encrypted size of a message. (It will be somewhat larger than the input.)
-        size_t encryptedSize(size_t inputSize);
 
         /// Encrypts an outgoing message, attaching the MAC and size.
         /// @note  Currently the maximum size message is 65535 bytes.
@@ -66,6 +89,23 @@ namespace snej::shs {
         ///             On success, `out.size` will be set to the encrypted size.
         /// @return  The status, either `Success` or `OutTooSmall`.
         status encrypt(input_data in, output_buffer &out);
+    };
+
+
+    /// Message-oriented decryption using keys & nonces from a Session:
+    /// Decrypts _entire messages_ created by `EncryptoBox`, in the same order they were created.
+    /// Reads the message size so it knows how big the full message is, and indicates whether the
+    /// message is incomplete.
+    ///
+    /// `DecryptionStream` wraps this to provide a byte-oriented stream API.
+    class DecryptoBox : public CryptoBox {
+        public:
+        /// Constructs a `DecryptoBox` from an encryption key and nonce.
+        DecryptoBox(SessionKey const& key, Nonce const& nonce, Protocol protocol =Compact)
+        :CryptoBox(key, nonce, protocol) { }
+
+        explicit DecryptoBox(Session const& session, Protocol p =CryptoBox::Compact)
+        :DecryptoBox(session.decryptionKey, session.decryptionNonce, p) { }
 
         /// Returns the size of message that the input data will decrypt to, if known.
         /// The data doesn't need to contain a complete message, just the first few bytes.
@@ -103,15 +143,17 @@ namespace snej::shs {
         status decrypt(input_data &in, output_buffer &out);
 
     private:
-        Session&       _session;
-        Protocol const _protocol;
+        std::pair<status, size_t> decryptBoxStreamHeader(input_data in, BoxStreamHeader &header);
     };
 
 
 
-    // Abstract base class of EncryptionStream and DecryptionStream.
-    class CryptoStream : protected CryptoBox {
+    /// Byte-oriented stream crypto API;
+    /// abstract base class of EncryptionStream and DecryptionStream.
+    class CryptoStream {
     public:
+        using Protocol = CryptoBox::Protocol;
+
         /// Reads processed (encrypted or decrypted) data, copying it from the internal buffer.
         /// @param buffer  The address to copy data to
         /// @param maxSize  The maximum number of bytes to copy
@@ -130,7 +172,7 @@ namespace snej::shs {
         size_t skip(size_t);
 
     protected:
-        explicit CryptoStream(Session &session, Protocol p) :CryptoBox(session, p) { }
+        CryptoStream() = default;
         CryptoStream(const CryptoStream&) = delete;
         CryptoStream& operator=(const CryptoStream&) = delete;
 
@@ -145,10 +187,12 @@ namespace snej::shs {
     /// Pull doesn't have to keep up with push; data will be buffered as needed.
     class EncryptionStream : public CryptoStream {
     public:
-        /// Constructs a DecryptionStream on a Session.
-        /// @note It keeps a pointer to the Session, which must remain valid.
-        explicit EncryptionStream(Session &session, CryptoBox::Protocol protocol =Compact)
-        :CryptoStream(session, protocol) { }
+        /// Constructs an EncryptionStream.
+        EncryptionStream(SessionKey const& key, Nonce const& nonce, Protocol p =CryptoBox::Compact)
+        :_encryptor(key, nonce, p) { }
+
+        explicit EncryptionStream(Session const& session, Protocol p =CryptoBox::Compact)
+        :_encryptor(session.encryptionKey, session.encryptionNonce, p) { }
 
         /// Encrypts data. The ciphertext is then available to pull.
         /// @param data  The address of the cleartext data to add
@@ -163,6 +207,9 @@ namespace snej::shs {
 
         /// Encrypts all data buffered by `pushPartial`, which is then available to pull.
         void flush();
+
+    private:
+        EncryptoBox _encryptor;
     };
 
 
@@ -173,10 +220,12 @@ namespace snej::shs {
     /// Push and pull can run at different rates; data will be buffered as needed.
     class DecryptionStream : public CryptoStream {
     public:
-        /// Constructs a DecryptionStream on a Session.
-        /// @note It keeps a pointer to the Session, which must remain valid.
-        explicit DecryptionStream(Session &session, CryptoBox::Protocol protocol =Compact)
-        :CryptoStream(session, protocol) { }
+        /// Constructs a DecryptionStream.
+        DecryptionStream(SessionKey const& key, Nonce const& nonce, Protocol p =CryptoBox::Compact)
+        :_decryptor(key, nonce, p) { }
+
+        explicit DecryptionStream(Session const& session, Protocol p =CryptoBox::Compact)
+        :_decryptor(session.decryptionKey, session.decryptionNonce, p) { }
 
         /// Adds encrypted data received from the sender.
         /// It will be internally buffered and decrypted.
@@ -186,6 +235,9 @@ namespace snej::shs {
         /// @param size  The size of the encrypted data
         /// @return  True on success, false if the data is corrupted.
         bool push(const void *data, size_t size);
+
+    private:
+        DecryptoBox _decryptor;
     };
 
 }
