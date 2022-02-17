@@ -10,7 +10,12 @@ set(CMAKE_CXX_STANDARD          17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD            11)
 set(CMAKE_C_STANDARD_REQUIRED   ON)
-add_compile_options(            -Wall -Wpedantic -Werror)
+
+if (MSVC)
+    add_compile_options(/W4) # TODO: Add /WX
+else()
+    add_compile_options(-Wall -Wpedantic -Werror -Wno-unknown-pragmas)
+endif()
 
 
 include_directories(
