@@ -2,9 +2,15 @@ cmake_minimum_required(VERSION 3.16)
 
 project(SecretHandshakeCpp)
 
+## NOTE: libSodium is required for building the tests, but not the library itself.
+
 add_subdirectory(vendor/monocypher-cpp)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD          17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD            11)
+set(CMAKE_C_STANDARD_REQUIRED   ON)
+add_compile_options(            -Wall -Wpedantic -Werror)
 
 
 include_directories(
@@ -24,6 +30,7 @@ target_link_libraries( SecretHandshakeCpp INTERFACE
     MonocypherCpp
 )
 
+
 #### TESTS
 
 if(APPLE)
@@ -39,7 +46,7 @@ if(APPLE)
 endif()
 
 add_executable( SecretHandshakeTests
-    vendor/monocypher-cpp/tests/tests_main.cc
+    vendor/monocypher-cpp/tests/tests_main.cc           # Include the Monocypher-cpp tests too
     vendor/monocypher-cpp/tests/MonocypherCppTests.cc
     tests/shsTests.cc
     tests/SecretHandshakeTests.cc

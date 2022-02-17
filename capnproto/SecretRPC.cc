@@ -118,6 +118,8 @@ namespace snej::shs {
             ,_rpcSystem(makeRpcServer(_network, *this))
             { }
 
+            virtual ~Connection() = default;
+
             Capability::Client restore(AnyPointer::Reader objectId) override {
                 if (objectId.isNull()) {
                     return _mainInterface;
@@ -129,9 +131,9 @@ namespace snej::shs {
 
             kj::AuthenticatedStream                 _stream;
             TwoPartyVatNetwork                      _network;
-            RpcSystem<capnp::rpc::twoparty::VatId>  _rpcSystem;
             Capability::Client                      _mainInterface;
             SturdyRefRestorer<AnyPointer>&          _parentRestorer;
+            RpcSystem<capnp::rpc::twoparty::VatId>  _rpcSystem;
         };
 
 

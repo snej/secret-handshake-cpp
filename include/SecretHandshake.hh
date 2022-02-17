@@ -171,8 +171,6 @@ namespace snej::shs {
         size_t _byteCountNeeded() override;
         bool _receivedBytes(const uint8_t *bytes) override;
         void _fillOutputBuffer(std::vector<uint8_t>&) override;
-    private:
-        PublicKey _serverPublicKey;
     };
 
 

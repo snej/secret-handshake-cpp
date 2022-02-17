@@ -47,7 +47,7 @@ namespace snej::shs {
         kj::LowLevelAsyncIoProvider& getLowLevelIoProvider();
 
     private:
-        class Impl;
+        struct Impl;
         kj::Own<Impl> _impl;
     };
 
@@ -79,7 +79,7 @@ namespace snej::shs {
         kj::LowLevelAsyncIoProvider& getLowLevelIoProvider();
 
     private:
-        class Impl;
+        struct Impl;
         kj::Own<Impl> _impl;
     };
 

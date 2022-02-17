@@ -209,7 +209,6 @@ namespace snej::shs {
     ClientHandshake::ClientHandshake(Context const& context,
                                      PublicKey const& theirPublicKey)
     :Handshake(context)
-    ,_serverPublicKey(theirPublicKey)
     {
         _impl->setServerPublicKey(impl::public_key(theirPublicKey));
     }

@@ -55,8 +55,8 @@ namespace snej::shs {
                       kj::Own<Handshake> handshake,
                       StreamWrapper::Authorizer authorizer)
         :_handshake(kj::mv(handshake))
-        ,_inner(stream)
         ,_authorizer(kj::mv(authorizer))
+        ,_inner(stream)
         { }
 
 
@@ -176,7 +176,6 @@ namespace snej::shs {
         kj::Maybe<Session>           _session;
         kj::Maybe<EncryptionStream>  _encryptor;
         kj::Maybe<DecryptionStream>  _decryptor;
-        bool                         _disconnected = false;
     };
 
 
