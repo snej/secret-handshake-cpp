@@ -68,21 +68,25 @@ namespace snej::shs {
         kj::Promise<Session> runHandshake() {
             if (_handshake->finished()) {
                 auto result = _handshake->session();
+                KJ_LOG(INFO, "SecretHandshake completed");
                 _handshake = nullptr;
                 if (_authorizer && !_authorizer(result.peerPublicKey))
                     return KJ_EXCEPTION(DISCONNECTED, "Unauthorized client key");
                 return result;
             } else if (auto [toSend, sendSize] = _handshake->bytesToSend(); sendSize > 0) {
-                return _inner.write(toSend, sendSize).then([&]() {
+                //KJ_LOG(INFO, "SecretHandshake: sending data", sendSize);
+                return _inner.write(toSend, sendSize).then([this]() {
                     _handshake->sendCompleted();
                     return runHandshake(); // continue
                 });
             } else if (auto [toRead, readSize] = _handshake->bytesToRead(); readSize > 0) {
-                return _inner.read(toRead, readSize).then([&]() {
+                return _inner.read(toRead, readSize).then([this]() {
+                    //KJ_LOG(INFO, "SecretHandshake: received data", bytesRead);
                     _handshake->readCompleted();
                     return runHandshake(); // continue
                 });
             } else {
+                KJ_LOG(ERROR, "SecretHandshake failed!");
                 assert(_handshake->failed());
                 return KJ_EXCEPTION(DISCONNECTED, "SecretHandshake protocol failed to connect");
             }
@@ -90,7 +94,7 @@ namespace snej::shs {
 
 
         kj::Promise<void> connect() {
-            return runHandshake().then([&](Session result) {
+            return runHandshake().then([this](Session result) {
                 _session = result;
                 _encryptor.emplace(result.encryptionKey, result.encryptionNonce);
                 _decryptor.emplace(result.decryptionKey, result.decryptionNonce);

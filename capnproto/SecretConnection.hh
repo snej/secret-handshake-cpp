@@ -32,6 +32,20 @@ namespace snej::shs {
         /// @note  The stream's `peerIdentity` will be a `SHSPeerIdentity`.
         kj::Promise<kj::AuthenticatedStream> wrap(kj::AuthenticatedStream stream);
 
+
+        /// Async version of `wrap` that takes a promised stream.
+        /// The wrapper is passed as a parameter so that it can be NULL, which is a no-op.
+        template <class STREAM>
+        static kj::Promise<STREAM> asyncWrap(StreamWrapper *wrapper,
+                                             kj::Promise<STREAM> streamPromise)
+        {
+            if (!wrapper)
+                return streamPromise;
+            return streamPromise.then([=](auto && stream) mutable {
+                return wrapper->wrap(kj::mv(stream));
+            });
+        }
+
     protected:
         virtual kj::Own<Handshake> newHandshake() =0;
 

@@ -81,7 +81,7 @@ namespace snej::shs {
     };
 
 
-#pragma mark - SERVER:
+#pragma mark - SERVER IMPL:
 
 
     struct SecretRPCServer::Impl final : public SturdyRefRestorer<AnyPointer>,
@@ -138,15 +138,22 @@ namespace snej::shs {
 
 
         Impl(MainInterfaceFactory mainInterfaceFactory,
-             kj::StringPtr bindAddress,
-             uint defaultPort,
              ReaderOptions readerOpts,
-             kj::Own<StreamWrapper> shsContext)
+             kj::Own<StreamWrapper> shsWrapper)
         :_mainInterfaceFactory(kj::mv(mainInterfaceFactory))
         ,_context(SecretRPCContext::getThreadLocal())
         ,_portPromise(nullptr)
         ,_tasks(*this)
-        ,_shsWrapper(kj::mv(shsContext))
+        ,_shsWrapper(kj::mv(shsWrapper))
+        { }
+
+
+        Impl(MainInterfaceFactory mainInterfaceFactory,
+             kj::StringPtr bindAddress,
+             uint defaultPort,
+             ReaderOptions readerOpts,
+             kj::Own<StreamWrapper> shsWrapper)
+        :Impl(mainInterfaceFactory, readerOpts, kj::mv(shsWrapper))
         {
             auto paf = kj::newPromiseAndFulfiller<uint>();
             _portPromise = paf.promise.fork();
@@ -161,28 +168,36 @@ namespace snej::shs {
             })));
         }
 
-        void acceptLoop(kj::Own<kj::ConnectionReceiver>&& listener, ReaderOptions readerOpts) {
-            auto ptr = listener.get();
-            auto streamPromise = ptr->acceptAuthenticated();
-            if (_shsWrapper) {
-                streamPromise = streamPromise.then([&](auto asyncStream) {
-                    return _shsWrapper->wrap(kj::mv(asyncStream));
-                });
-            }
-            _tasks.add(streamPromise.then(kj::mvCapture(
-                                    kj::mv(listener),
-                                    [this, readerOpts](kj::Own<kj::ConnectionReceiver>&& listener,
-                                                       kj::AuthenticatedStream&& stream)
-            {
+        void acceptLoop(kj::Own<kj::ConnectionReceiver>&& listener,
+                        ReaderOptions readerOpts)
+        {
+            auto streamPromise = listener->acceptAuthenticated();
+            streamPromise = StreamWrapper::asyncWrap(_shsWrapper.get(), kj::mv(streamPromise));
+            _tasks.add(streamPromise.then([this, readerOpts, listener=kj::mv(listener)]
+                                          (kj::AuthenticatedStream&& stream) mutable {
                 acceptLoop(kj::mv(listener), readerOpts);
-                auto peerID = dynamic_cast<const shs::SHSPeerIdentity*>(stream.peerIdentity.get());
-                auto mainInterface = _mainInterfaceFactory(peerID);
+                startConnection(kj::mv(stream), readerOpts);
+            }));
+        }
 
-                auto connection = kj::heap<Connection>(kj::mv(stream), mainInterface, *this, readerOpts);
-                // Arrange to destroy the Connection when all references are gone, or when the
-                // Server is destroyed (which will destroy the TaskSet).
-                _tasks.add(connection->_network.onDisconnect().attach(kj::mv(connection)));
-            })));
+        void acceptStream(kj::Promise<kj::AuthenticatedStream> &&streamPromise,
+                          ReaderOptions readerOpts)
+        {
+            streamPromise = StreamWrapper::asyncWrap(_shsWrapper.get(), kj::mv(streamPromise));
+            _tasks.add(streamPromise.then([this, readerOpts](kj::AuthenticatedStream&& stream) {
+                startConnection(kj::mv(stream), readerOpts);
+            }));
+        }
+
+        void startConnection(kj::AuthenticatedStream&& stream, ReaderOptions readerOpts) {
+            auto peerID = dynamic_cast<const shs::SHSPeerIdentity*>(stream.peerIdentity.get());
+            auto mainInterface = _mainInterfaceFactory(peerID);
+
+            auto connection = kj::heap<Connection>(kj::mv(stream), mainInterface, *this,
+                                                   readerOpts);
+            // Arrange to destroy the Connection when all references are gone, or when the
+            // Server is destroyed (which will destroy the TaskSet).
+            _tasks.add(connection->_network.onDisconnect().attach(kj::mv(connection)));
         }
 
         Capability::Client restore(AnyPointer::Reader objectId) override {
@@ -208,7 +223,9 @@ namespace snej::shs {
         std::map<kj::StringPtr, ExportedCap> _exportMap;
     };
 
-    
+
+#pragma mark - PUBLIC SERVER API:
+
 
     SecretRPCServer::SecretRPCServer(kj::Own<ServerWrapper> shsContext,
                                      MainInterfaceFactory mainInterfaceFactory,
@@ -217,6 +234,12 @@ namespace snej::shs {
                                      capnp::ReaderOptions readerOpts)
     :_impl(kj::heap<Impl>(mainInterfaceFactory, bindAddress, defaultPort, readerOpts,
                           kj::mv(shsContext)))
+    { }
+
+    SecretRPCServer::SecretRPCServer(kj::Own<ServerWrapper> shsContext,
+                                     MainInterfaceFactory mainInterfaceFactory,
+                                     capnp::ReaderOptions readerOpts)
+    :_impl(kj::heap<Impl>(mainInterfaceFactory, readerOpts, kj::mv(shsContext)))
     { }
 
     SecretRPCServer::~SecretRPCServer() noexcept(false) { }
@@ -237,9 +260,14 @@ namespace snej::shs {
         return _impl->_context->getLowLevelIoProvider();
     }
 
+    void SecretRPCServer::acceptStream(kj::Promise<kj::AuthenticatedStream> streamPromise,
+                                       ReaderOptions readerOpts)
+    {
+        _impl->acceptStream(kj::mv(streamPromise), readerOpts);
+    }
 
 
-#pragma mark - CLIENT:
+#pragma mark - CLIENT IMPL:
 
 
     static kj::Promise<kj::Own<kj::AsyncIoStream>> connectAttach(kj::Own<kj::NetworkAddress>&& addr) {
@@ -288,27 +316,36 @@ namespace snej::shs {
         };
 
 
-        Impl(kj::StringPtr serverAddress,
-             uint defaultPort,
+        // utility to open a stream to an address/port.
+        static kj::Promise<kj::Own<kj::AsyncIoStream>> connectTo(kj::StringPtr serverAddress,
+                                                                 uint defaultPort)
+        {
+            auto &ioProvider = SecretRPCContext::getThreadLocal()->getIoProvider();
+            return ioProvider.getNetwork()
+                             .parseAddress(serverAddress, defaultPort)
+                             .then([](kj::Own<kj::NetworkAddress>&& addr) {
+                                 return connectAttach(kj::mv(addr));
+                             });
+        }
+
+
+        Impl(kj::Own<ClientWrapper> shsWrapper,
              ReaderOptions readerOpts,
-             kj::Own<ClientWrapper> shsWrapper)
+             kj::Promise<kj::Own<kj::AsyncIoStream>> streamPromise)
         :_context(SecretRPCContext::getThreadLocal())
         ,_shsWrapper(kj::mv(shsWrapper))
-        ,_setupPromise(_context->getIoProvider().getNetwork()
-                       .parseAddress(serverAddress, defaultPort)
-                       .then([](kj::Own<kj::NetworkAddress>&& addr) {
-            return connectAttach(kj::mv(addr));
-        }).then([this](kj::Own<kj::AsyncIoStream>&& stream)
-                -> kj::Promise<kj::Own<kj::AsyncIoStream>> {
-            if (_shsWrapper) {
-                return _shsWrapper->wrap(kj::mv(stream));
-            } else {
-                return kj::mv(stream);
-            }
-        }).then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
-            _clientContext = kj::heap<ClientContext>(kj::mv(stream),
-                                                     readerOpts);
-        }).fork())
+        ,_setupPromise(ClientWrapper::asyncWrap(_shsWrapper.get(), kj::mv(streamPromise))
+                       .then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
+                           _clientContext = kj::heap<ClientContext>(kj::mv(stream), readerOpts);
+                       }).fork())
+        { }
+
+
+        Impl(kj::Own<ClientWrapper> shsWrapper,
+             ReaderOptions readerOpts,
+             kj::StringPtr serverAddress,
+             uint defaultPort)
+        :Impl(kj::mv(shsWrapper), readerOpts, connectTo(serverAddress, defaultPort))
         { }
 
 
@@ -334,12 +371,20 @@ namespace snej::shs {
     };
 
 
+#pragma mark - PUBLIC CLIENT API:
+
 
     SecretRPCClient::SecretRPCClient(kj::Own<ClientWrapper> shsContext,
                                      kj::StringPtr serverAddress,
                                      uint16_t serverPort,
                                      capnp::ReaderOptions readerOpts)
-    :_impl(kj::heap<Impl>(serverAddress, serverPort, readerOpts, kj::mv(shsContext)))
+    :_impl(kj::heap<Impl>(kj::mv(shsContext), readerOpts, serverAddress, serverPort))
+    { }
+
+    SecretRPCClient::SecretRPCClient(kj::Own<ClientWrapper> shsContext,
+                                     kj::Promise<kj::Own<kj::AsyncIoStream>> streamPromise,
+                                     capnp::ReaderOptions readerOpts)
+    :_impl(kj::heap<Impl>(kj::mv(shsContext), readerOpts, kj::mv(streamPromise)))
     { }
 
     SecretRPCClient::~SecretRPCClient() noexcept(false) { }

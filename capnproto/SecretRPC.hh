@@ -46,6 +46,18 @@ namespace snej::shs {
 
         kj::LowLevelAsyncIoProvider& getLowLevelIoProvider();
 
+        
+        /// Constructor that doesn't open a listening socket.
+        /// Instead, you have to call `acceptStream` to connect streams to it. Used for testing.
+        SecretRPCServer(kj::Own<ServerWrapper> shsContext,
+                        MainInterfaceFactory mainInterfaceFactory,
+                        capnp::ReaderOptions readerOpts);
+
+        /// Connects a (promised) stream to the server, as though a client had connected.
+        /// Used for testing.
+        void acceptStream(kj::Promise<kj::AuthenticatedStream> streamPromise,
+                          capnp::ReaderOptions readerOpts);
+
     private:
         struct Impl;
         kj::Own<Impl> _impl;
@@ -60,11 +72,22 @@ namespace snej::shs {
         /// @param shsWrapper  The client's SecretHandshake info, or empty to disable secrecy.
         /// @param serverAddress  The address to connect to.
         /// @param serverPort  The TCP port to connect to.
+        /// @param readerOpts  RPC options controlling how data is read.
         SecretRPCClient(kj::Own<ClientWrapper> shsWrapper,
                         kj::StringPtr serverAddress,
                         uint16_t serverPort,
                         capnp::ReaderOptions readerOpts = {});
+
+        /// Initializes the client on a (promised) stream.
+        /// @param shsWrapper  The client's SecretHandshake info, or empty to disable secrecy.
+        /// @param streamPromise  The promised AsyncIoStream.
+        /// @param readerOpts  RPC options controlling how data is read.
+        SecretRPCClient(kj::Own<ClientWrapper> shsWrapper,
+                        kj::Promise<kj::Own<kj::AsyncIoStream>> streamPromise,
+                        capnp::ReaderOptions readerOpts = {});
+
         SecretRPCClient(SecretRPCClient &&other);
+
         ~SecretRPCClient() noexcept(false);
 
         template <typename Type>
