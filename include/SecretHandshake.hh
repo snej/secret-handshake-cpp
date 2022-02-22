@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace snej::shs {
@@ -77,7 +78,7 @@ namespace snej::shs {
         Context(AppID const& a,  KeyPair const& sk)  :appID(a), keyPair(sk) { }
         Context(char const* str, KeyPair const& sk)  :appID(appIDFromString(str)), keyPair(sk) { }
 
-        AppID const     appID;      ///< Arbitrary 32-byte value identifying the app/protocol
+        AppID const   appID;      ///< Arbitrary 32-byte value identifying the app/protocol
         KeyPair const keyPair;    ///< Ed25519 key-pair for authentication
 
         /// Simple transformation of an ASCII string to an AppID.
@@ -103,7 +104,7 @@ namespace snej::shs {
         /// @param src  The received data.
         /// @param count  The number of bytes received.
         /// @return  The number of bytes consumed. -1 on error.
-        ssize_t receivedBytes(const void *src, size_t count);
+        intptr_t receivedBytes(const void *src, size_t count);
 
         /// Returns the current bytes to send, as a pointer and length.
         /// Call after constructor, and after calling `receivedBytes`.
@@ -120,7 +121,7 @@ namespace snej::shs {
         /// @param dst  The buffer to copy the bytes to.
         /// @param maxCount  The size of the buffer.
         /// @return  The number of bytes written to the buffer. -1 on error.
-        ssize_t copyBytesToSend(void *dst, size_t maxCount);
+        intptr_t copyBytesToSend(void *dst, size_t maxCount);
 
         /// True if the handshake has failed. You should close the socket.
         bool failed()                  {return _step == Failed;}

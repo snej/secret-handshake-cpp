@@ -34,6 +34,8 @@
 #include <kj/async-queue.h>
 #include <kj/debug.h>
 #include <kj/vector.h>
+#include <stdexcept>
+#include "assert.h"
 
 namespace snej::shs {
 

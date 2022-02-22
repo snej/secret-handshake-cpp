@@ -59,12 +59,9 @@ namespace snej::shs {
 
 
     AppID Context::appIDFromString(const char *str) {
-        AppID id;
-        ::strncpy((char*)&id, str, sizeof(id));
+        monocypher::byte_array<32> id;
+        id.fillWithString(str);
         return id;
-        // (Yes, the call to strncpy is safe. It copies `str` into the buffer `id` and zeroes the
-        // rest. If `str` is too long to fit it does not zero-terminate, but that isn't a problem
-        // because `AppID` isn't a string and doesn't need to end with a 00.)
     }
 
 
@@ -120,7 +117,7 @@ namespace snej::shs {
     }
 
 
-    ssize_t Handshake::receivedBytes(const void *src, size_t count) {
+    intptr_t Handshake::receivedBytes(const void *src, size_t count) {
         if (_step == Failed || _step == Finished)
             return -1;
         size_t needed = _byteCountNeeded();
@@ -160,7 +157,7 @@ namespace snej::shs {
     }
 
 
-    ssize_t Handshake::copyBytesToSend(void *dst, size_t maxCount) {
+    intptr_t Handshake::copyBytesToSend(void *dst, size_t maxCount) {
         if (_step == Failed)
             return -1;
         if (_outputBuffer.empty()) {

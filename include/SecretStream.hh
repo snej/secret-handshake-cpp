@@ -6,6 +6,8 @@
 
 #pragma once
 #include "SecretHandshake.hh"
+#include <utility>
+#include <vector>
 
 namespace snej::shs {
 
