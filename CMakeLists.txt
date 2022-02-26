@@ -57,11 +57,13 @@ add_executable( SecretHandshakeTests
     tests/SecretHandshakeTests.cc
     vendor/shs1-c/src/shs1.c
 )
-if (NOT MSVC)
+
+if (CMAKE_COMPILER_IS_GNUCC)
     set_source_files_properties(
         vendor/shs1-c/src/shs1.c  PROPERTIES COMPILE_OPTIONS  "-Wno-array-parameter"
     )
 endif()
+
 target_include_directories( SecretHandshakeTests PRIVATE
     vendor/shs1-c/src/
     vendor/catch2
