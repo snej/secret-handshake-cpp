@@ -36,11 +36,9 @@ There are some unit tests in `SecretHandshakeTests.cc`. They use the [Catch2](ht
 
 ## Status
 
-As of February 2022, this is pretty new and minimally tested. It does work, in an app I’m developing, but there are no unit tests.
+As of February 2022, this is fairly new code, and hasn't been used in any released software. It does work correctly in an app I’m developing, and has basic unit tests, including a test that the network data it sends is identical with that of an established SecretHAndshake implementation.
 
-It’s only been built with Clang 12 (Xcode 13.1), and only run on macOS 12.
-
-I’ll update this notice as things get more solid.
+It builds with Clang 12 and recent GCC, and is run & tested on macOS and Ubuntu by Github CI.
 
 ## License
 
@@ -48,4 +46,4 @@ The code in this repo is provided under the MIT license.
 
 Monocypher uses the 2-clause BSD license.
 
-The code in the `shs-1` submodule is LGPL-licensed, but since it is only used in the tests (`shsTests.cc`) it has no effect on the licensing of the library itself.
+(The code in the `shs-1` submodule is LGPL-licensed, but since it is only used in the tests (`shsTests.cc`) it has no effect on the licensing of the library itself.)
