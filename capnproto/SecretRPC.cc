@@ -316,19 +316,6 @@ namespace snej::shs {
         };
 
 
-        // utility to open a stream to an address/port.
-        static kj::Promise<kj::Own<kj::AsyncIoStream>> connectTo(kj::StringPtr serverAddress,
-                                                                 uint defaultPort)
-        {
-            auto &ioProvider = SecretRPCContext::getThreadLocal()->getIoProvider();
-            return ioProvider.getNetwork()
-                             .parseAddress(serverAddress, defaultPort)
-                             .then([](kj::Own<kj::NetworkAddress>&& addr) {
-                                 return connectAttach(kj::mv(addr));
-                             });
-        }
-
-
         Impl(kj::Own<ClientWrapper> shsWrapper,
              ReaderOptions readerOpts,
              kj::Promise<kj::Own<kj::AsyncIoStream>> streamPromise)
@@ -338,14 +325,6 @@ namespace snej::shs {
                        .then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
                            _clientContext = kj::heap<ClientContext>(kj::mv(stream), readerOpts);
                        }).fork())
-        { }
-
-
-        Impl(kj::Own<ClientWrapper> shsWrapper,
-             ReaderOptions readerOpts,
-             kj::StringPtr serverAddress,
-             uint defaultPort)
-        :Impl(kj::mv(shsWrapper), readerOpts, connectTo(serverAddress, defaultPort))
         { }
 
 
@@ -378,8 +357,16 @@ namespace snej::shs {
                                      kj::StringPtr serverAddress,
                                      uint16_t serverPort,
                                      capnp::ReaderOptions readerOpts)
-    :_impl(kj::heap<Impl>(kj::mv(shsContext), readerOpts, serverAddress, serverPort))
-    { }
+    {
+        kj::Own<SecretRPCContext> context = SecretRPCContext::getThreadLocal();
+        auto streamPromise = context->getIoProvider()
+                                     .getNetwork()
+                                     .parseAddress(serverAddress, serverPort)
+                                     .then([](kj::Own<kj::NetworkAddress>&& addr) {
+                                         return connectAttach(kj::mv(addr));
+                                     });
+        _impl = kj::heap<Impl>(kj::mv(shsContext), readerOpts, kj::mv(streamPromise));
+    }
 
     SecretRPCClient::SecretRPCClient(kj::Own<ClientWrapper> shsContext,
                                      kj::Promise<kj::Own<kj::AsyncIoStream>> streamPromise,
