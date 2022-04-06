@@ -245,7 +245,7 @@ namespace snej::shs {
 
         while (true) {
             // See if there's enough to decrypt:
-            output_buffer out = {&_buffer[_processedBytes],
+            output_buffer out = {(_buffer.empty() ? nullptr : &_buffer[_processedBytes]),
                                  _buffer.size() - _processedBytes};
             input_data in = {out.data, out.size};
             switch (_decryptor.decrypt(in, out)) {
