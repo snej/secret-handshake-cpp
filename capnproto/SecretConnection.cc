@@ -116,7 +116,7 @@ namespace snej::shs {
             if (decryptor.bytesAvailable() >= minBytes) {
                 return decryptor.pull(buffer, maxBytes);
             } else {
-                return _inner.tryRead(buffer, 1, maxBytes).then([=](size_t nBytes) {
+                return _inner.tryRead(buffer, 1, maxBytes).then([this,buffer,minBytes,maxBytes](size_t nBytes) {
                     if (!KJ_REQUIRE_NONNULL(_decryptor).push(buffer, nBytes))
                         throw std::runtime_error("Received corrupt input data");
                     return tryRead(buffer, minBytes, maxBytes);
@@ -142,7 +142,7 @@ namespace snej::shs {
 
         kj::Promise<void> _endWrite() {
             auto avail = KJ_REQUIRE_NONNULL(_encryptor).availableData();
-            return _inner.write(avail.data, avail.size).then([=] {
+            return _inner.write(avail.data, avail.size).then([this,avail] {
                 KJ_REQUIRE_NONNULL(_encryptor).skip(avail.size);
             });
         }
