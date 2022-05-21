@@ -306,3 +306,71 @@ TEST_CASE_METHOD(SessionTest, "Decryption Stream", "[SecretHandshake]") {
     CHECK(dec.pull(&clearBuf[bytesRead], 100) == 0);
     CHECK(dec.bytesAvailable() == 0);
 }
+
+
+TEST_CASE_METHOD(SessionTest, "Decryption Stream large data", "[SecretHandshake]") {
+    auto protocol = GENERATE(CryptoBox::Compact, CryptoBox::BoxStream);
+    size_t kEncOverhead = 18 + (protocol == CryptoBox::BoxStream) * 16;
+    cerr << "\t---- protocol=" << int(protocol) << endl;
+
+    EncryptionStream enc(session1, protocol);
+    DecryptionStream dec(session2, protocol);
+
+    static constexpr size_t kBufSize = 1000;
+    array<char,kBufSize> cipherBuf, clearBuf;
+
+    CHECK(dec.pull(clearBuf.data(), sizeof(clearBuf)) == 0);
+
+    auto transfer = [&](size_t nBytes) {
+        assert(nBytes <= kBufSize);
+        nBytes = enc.pull(cipherBuf.data(), nBytes);
+        CHECK(dec.push(cipherBuf.data(), nBytes));
+    };
+
+    static constexpr size_t kMessageSize = 100000;
+    static_assert(kMessageSize > EncryptoBox::kMaxMessageSize);
+    auto message = vector<char>(kMessageSize);
+    monocypher::randomize(message.data(), message.size());
+    size_t messagePos = 0;
+
+    // Encrypt a 30,000-byte message:
+    enc.pushPartial(&message[messagePos], 20000); messagePos += 20000;
+    CHECK(enc.bytesAvailable() == 0);
+    enc.pushPartial(&message[messagePos], 10000); messagePos += 10000;
+    CHECK(enc.bytesAvailable() == 0);
+    enc.flush();
+    CHECK(enc.bytesAvailable() == 30000 + kEncOverhead);
+
+    // Transfer it in two parts:
+    for (int i = 0; i < 31; ++i)
+        transfer(1000);
+    CHECK(enc.bytesAvailable() == 0);
+    CHECK(dec.bytesAvailable() == 30000);
+
+    // Read it:
+    auto gotMessage = vector<char>(100000);
+    size_t bytesRead = dec.pull(gotMessage.data(), gotMessage.size());
+    CHECK(bytesRead == 30000);
+    CHECK(memcmp(gotMessage.data(), message.data(), bytesRead) == 0);
+
+    // Encrypt the remaining 70,000 bytes at once, exceeding the max box size:
+    static_assert(40000 + 30000 > EncryptoBox::kMaxMessageSize);
+    enc.pushPartial(&message[messagePos], 40000); messagePos += 40000;
+    CHECK(enc.bytesAvailable() == 0);
+    enc.pushPartial(&message[messagePos], 30000); messagePos += 30000;
+    REQUIRE(messagePos == message.size());
+    //CHECK(enc.bytesAvailable() == 0);
+    enc.flush();
+    CHECK(enc.bytesAvailable() == 70000 + 2 * kEncOverhead);
+
+    // Transfer it in parts:
+    for (int i = 0; i < 71; ++i)
+        transfer(1000);
+    CHECK(enc.bytesAvailable() == 0);
+    CHECK(dec.bytesAvailable() == 70000);
+
+    // Read it:
+    bytesRead = dec.pull(gotMessage.data(), gotMessage.size());
+    CHECK(bytesRead == 70000);
+    CHECK(memcmp(gotMessage.data(), &message[30000], bytesRead) == 0);
+}

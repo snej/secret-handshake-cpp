@@ -58,6 +58,17 @@ namespace snej::shs {
     };
 
 
+    static inline void writeUint16At(uint8_t *dst, size_t size) {
+        assert (size <= 0xFFFF);
+        dst[0] = (size >> 8) & 0xFF;
+        dst[1] = size & 0xFF;
+    }
+
+    static inline size_t readUint16At(const uint8_t *src) {
+        return (size_t(src[0]) << 8) | src[1];
+    }
+
+
     size_t CryptoBox::encryptedSize(size_t inputSize) {
         static_assert(sizeof(CryptoBox::BoxStreamHeader) == 2 + sizeof(MAC));
 
@@ -88,8 +99,7 @@ namespace snej::shs {
             // Create a header buffer that starts with the cleartext length:
             auto &key = (const box_stream_key&)_key;
             BoxStreamHeader header;
-            header.size_be[0] = (in.size >> 8) & 0xFF;
-            header.size_be[1] = in.size & 0xFF;
+            writeUint16At(header.size_be, in.size);
             // Encrypt the message. Ciphertext goes into `out`, MAC goes into the header:
             auto ciphertextp = dst + sizeof(header) + sizeof(MAC);
             header.mac = key.lock(nonce, {in.data, in.size}, ciphertextp);
@@ -98,22 +108,18 @@ namespace snej::shs {
             key.box(nonce, {&header, sizeof(header)}, {dst, encSize});
             ++nonce;
         } else {
-            // Simpler protocol -- just plaintext size + box
+            // Simpler protocol -- just plaintext_size + box
             auto &key = (const compact_key&)_key;
             key.box(nonce, {in.data, in.size}, {dst + 2, encSize - 2});
             ++nonce;
-
-            // Now write the byte count at the start:
-            encSize -= 2;  // don't include the size of the byte-count in the byte-count
-            dst[0] = (encSize >> 8) & 0xFF;
-            dst[1] = encSize & 0xFF;
+            writeUint16At(dst, in.size);
         }
         return Success;
     }
 
 
     std::pair<status, size_t> DecryptoBox::decryptBoxStreamHeader(input_data in,
-                                                              BoxStreamHeader &header)
+                                                                  BoxStreamHeader &header)
     {
         if (in.size < sizeof(MAC) + sizeof(header))
             return {IncompleteInput, 0};
@@ -127,7 +133,7 @@ namespace snej::shs {
                              {&header, sizeof(header)});
         if (out.size != sizeof(header))
             return {CorruptData, 0};
-        return {Success, (size_t(header.size_be[0]) << 8) | header.size_be[1]};
+        return {Success, readUint16At(header.size_be)};
     }
 
 
@@ -138,11 +144,7 @@ namespace snej::shs {
         } else {
             if (in.size < 2)
                 return {IncompleteInput, 0};
-            auto src = (const uint8_t*)in.data;
-            size_t boxSize = (size_t(src[0]) << 8) | src[1];
-            if (boxSize < sizeof(MAC))
-                return {CorruptData, 0};
-            return {Success, boxSize - sizeof(MAC)};
+            return {Success, readUint16At((const uint8_t*)in.data)};
         }
     }
 
@@ -220,21 +222,33 @@ namespace snej::shs {
 
 
     void EncryptionStream::pushPartial(const void *data, size_t size) {
-        // Append data to the buffer:
+        // Append data to the buffer. The unprocessed data can only grow to 64KB (kMaxMessageSize),
+        // so if there's more data than that, flush periodically.
         auto begin = (const uint8_t*)data;
-        _buffer.insert(_buffer.end(), begin, begin + size);
+        while (size > 0) {
+            size_t maxSize = EncryptoBox::kMaxMessageSize - (_buffer.size() - _processedBytes);
+            size_t chunk = std::min(size, maxSize);
+            _buffer.insert(_buffer.end(), begin, begin + chunk);
+            size -= chunk;
+            if (size > 0) {
+                begin += chunk;
+                flush();
+            }
+        }
     }
 
 
     void EncryptionStream::flush() {
         size_t msgSize = _buffer.size() - _processedBytes;
-        _buffer.resize(_processedBytes + _encryptor.encryptedSize(msgSize));
-        input_data in = {&_buffer[_processedBytes], msgSize};
-        output_buffer out = {(void*)in.data, _buffer.size() - _processedBytes};
-        _UNUSED auto status = _encryptor.encrypt(in, out);
-        assert(status == Success);
-        _processedBytes += out.size;
-        _buffer.resize(_processedBytes);
+        if (msgSize > 0) {
+            _buffer.resize(_processedBytes + _encryptor.encryptedSize(msgSize));
+            input_data in = {&_buffer[_processedBytes], msgSize};
+            output_buffer out = {(void*)in.data, _buffer.size() - _processedBytes};
+            _UNUSED auto status = _encryptor.encrypt(in, out);
+            assert(status == Success);
+            _processedBytes += out.size;
+            _buffer.resize(_processedBytes);
+        }
     }
 
 
