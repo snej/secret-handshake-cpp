@@ -116,7 +116,10 @@ namespace snej::shs {
             if (decryptor.bytesAvailable() >= minBytes) {
                 return decryptor.pull(buffer, maxBytes);
             } else {
-                return _inner.tryRead(buffer, 1, maxBytes).then([this,buffer,minBytes,maxBytes](size_t nBytes) {
+                return _inner.tryRead(buffer, 1, maxBytes).then([this,buffer,minBytes,maxBytes](size_t nBytes)
+                                                                -> kj::Promise<size_t> {
+                    if (nBytes == 0)  // this happens when the socket is disconnected
+                        return kj::Promise<size_t>(size_t(0));
                     if (!KJ_REQUIRE_NONNULL(_decryptor).push(buffer, nBytes))
                         throw std::runtime_error("Received corrupt input data");
                     return tryRead(buffer, minBytes, maxBytes);

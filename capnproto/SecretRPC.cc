@@ -144,6 +144,7 @@ namespace snej::shs {
         ,_context(SecretRPCContext::getThreadLocal())
         ,_portPromise(nullptr)
         ,_tasks(*this)
+        ,_readerOptions(readerOpts)
         ,_shsWrapper(kj::mv(shsWrapper))
         { }
 
@@ -160,23 +161,26 @@ namespace snej::shs {
 
             _tasks.add(_context->getIoProvider().getNetwork().parseAddress(bindAddress, defaultPort)
                        .then(kj::mvCapture(paf.fulfiller,
-                                           [this, readerOpts](kj::Own<kj::PromiseFulfiller<uint>>&& portFulfiller,
-                                                              kj::Own<kj::NetworkAddress>&& addr) {
-                auto listener = addr->listen();
-                portFulfiller->fulfill(listener->getPort());
-                acceptLoop(kj::mv(listener), readerOpts);
+                                           [this](kj::Own<kj::PromiseFulfiller<uint>>&& portFulfiller,
+                                                  kj::Own<kj::NetworkAddress>&& addr) {
+                _listener = addr->listen();
+                portFulfiller->fulfill(_listener->getPort());
+                acceptLoop();
             })));
         }
 
-        void acceptLoop(kj::Own<kj::ConnectionReceiver>&& listener,
-                        ReaderOptions readerOpts)
-        {
-            auto streamPromise = listener->acceptAuthenticated();
+        void acceptLoop() {
+            KJ_LOG(INFO, "SecretRPCServer now accepting connections...");
+            auto streamPromise = _listener->acceptAuthenticated();
             streamPromise = StreamWrapper::asyncWrap(_shsWrapper.get(), kj::mv(streamPromise));
-            _tasks.add(streamPromise.then([this, readerOpts, listener=kj::mv(listener)]
-                                          (kj::AuthenticatedStream&& stream) mutable {
-                acceptLoop(kj::mv(listener), readerOpts);
-                startConnection(kj::mv(stream), readerOpts);
+            _tasks.add(streamPromise.then([this](kj::AuthenticatedStream&& stream) {
+                KJ_LOG(INFO, "SecretRPCServer received connection");
+                acceptLoop();
+                startConnection(kj::mv(stream), _readerOptions);
+            },
+                                          [this](kj::Exception &&x) {
+                KJ_LOG(ERROR, "SecretRPCServer failed to open connection");
+                acceptLoop();
             }));
         }
 
@@ -219,8 +223,10 @@ namespace snej::shs {
         kj::Own<SecretRPCContext>            _context;
         kj::ForkedPromise<uint>              _portPromise;
         kj::TaskSet                          _tasks;
+        ReaderOptions                        _readerOptions;
         kj::Own<StreamWrapper>               _shsWrapper;
         std::map<kj::StringPtr, ExportedCap> _exportMap;
+        kj::Own<kj::ConnectionReceiver>      _listener;
     };
 
 
