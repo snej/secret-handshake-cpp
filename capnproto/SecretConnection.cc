@@ -35,6 +35,8 @@
 #include <kj/debug.h>
 #include <kj/vector.h>
 #include <stdexcept>
+#include <string>
+#include <arpa/inet.h>
 #include "assert.h"
 
 namespace snej::shs {
@@ -94,6 +96,9 @@ namespace snej::shs {
 
 
         kj::Promise<void> connect() {
+            std::string address = getPeerName();
+            KJ_LOG(INFO, "Beginning SecretHandshake with peer ", address);
+
             return runHandshake().then([this](Session result) {
                 _session = result;
                 _encryptor.emplace(result.encryptionKey, result.encryptionNonce);
@@ -108,6 +113,20 @@ namespace snej::shs {
             } else {
                 return {};
             }
+        }
+
+
+        std::string getPeerName() {
+            char nameBuf[INET6_ADDRSTRLEN] = "";
+            try {
+                sockaddr_in6 addr;
+                unsigned addrLen = sizeof(addr);
+                _ownInner->getpeername((sockaddr*)&addr, &addrLen);
+                inet_ntop(addr.sin6_family, &addr.sin6_addr, nameBuf, sizeof(nameBuf));
+            } catch (...) {
+                // AsyncIoStream::getpeername throws an exception if the stream is not a socket :(
+            }
+            return std::string(nameBuf);
         }
 
 
