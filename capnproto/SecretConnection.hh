@@ -23,6 +23,9 @@ namespace snej::shs {
 
         void setConnectTimeout(kj::Duration timeout, kj::Timer &timer);
 
+        void setIsSocket(bool isSocket)                     {_isSocket = isSocket;}
+        bool isSocket() const                               {return _isSocket;}
+
         /// Upgrades a regular network stream to use SecretHandshake.
         /// The returned promise resolves when the handshake has completed successfully.
         kj::Promise<kj::Own<kj::AsyncIoStream>> wrap(kj::Own<kj::AsyncIoStream>);
@@ -53,6 +56,7 @@ namespace snej::shs {
         Authorizer              _authorizer;
         kj::Maybe<kj::Duration> _connectTimeout;
         kj::Maybe<kj::Timer*>   _connectTimer;
+        bool                    _isSocket = true;
     };
 
 

@@ -60,6 +60,8 @@ TEST_CASE("SecretConnection", "[SecretHandshake]") {
         serverKey[8] ^= 0x40;
     ClientWrapper clientWrapper(clientContext, serverKey);
     ServerWrapper serverWrapper(serverContext, nullptr);
+    clientWrapper.setIsSocket(false);
+    serverWrapper.setIsSocket(false);
 
     kj::EventLoop loop;
     kj::WaitScope waitScope(loop);

@@ -48,8 +48,9 @@ namespace snej::shs {
     public:
         WrappedStream(kj::Own<kj::AsyncIoStream> stream,
                       kj::Own<Handshake> handshake,
-                      StreamWrapper::Authorizer authorizer)
-        :WrappedStream(*stream, kj::mv(handshake), kj::mv(authorizer))
+                      StreamWrapper::Authorizer authorizer,
+                      bool isSocket)
+        :WrappedStream(*stream, kj::mv(handshake), kj::mv(authorizer), isSocket)
         {
             _ownInner = kj::mv(stream);
         }
@@ -57,10 +58,12 @@ namespace snej::shs {
 
         WrappedStream(kj::AsyncIoStream& stream,
                       kj::Own<Handshake> handshake,
-                      StreamWrapper::Authorizer authorizer)
+                      StreamWrapper::Authorizer authorizer,
+                      bool isSocket)
         :_handshake(kj::mv(handshake))
         ,_authorizer(kj::mv(authorizer))
         ,_inner(stream)
+        ,_isSocket(isSocket)
         { }
 
 
@@ -117,15 +120,13 @@ namespace snej::shs {
 
 
         std::string getPeerName() {
+            if (!_isSocket)
+                return "";
             char nameBuf[INET6_ADDRSTRLEN] = "";
-            try {
-                sockaddr_in6 addr;
-                unsigned addrLen = sizeof(addr);
-                _ownInner->getpeername((sockaddr*)&addr, &addrLen);
-                inet_ntop(addr.sin6_family, &addr.sin6_addr, nameBuf, sizeof(nameBuf));
-            } catch (...) {
-                // AsyncIoStream::getpeername throws an exception if the stream is not a socket :(
-            }
+            sockaddr_in6 addr;
+            unsigned addrLen = sizeof(addr);
+            getpeername((sockaddr*)&addr, &addrLen);
+            inet_ntop(addr.sin6_family, &addr.sin6_addr, nameBuf, sizeof(nameBuf));
             return std::string(nameBuf);
         }
 
@@ -204,6 +205,7 @@ namespace snej::shs {
         kj::Maybe<Session>           _session;
         kj::Maybe<EncryptionStream>  _encryptor;
         kj::Maybe<DecryptionStream>  _decryptor;
+        bool                         _isSocket;
     };
 
 
@@ -217,7 +219,7 @@ namespace snej::shs {
 
     
     kj::Promise<kj::Own<kj::AsyncIoStream>> StreamWrapper::wrap(kj::Own<kj::AsyncIoStream> stream) {
-        auto conn = kj::heap<WrappedStream>(kj::mv(stream), newHandshake(), _authorizer);
+        auto conn = kj::heap<WrappedStream>(kj::mv(stream), newHandshake(), _authorizer, _isSocket);
         auto promise = conn->connect();
         return promise.then(kj::mvCapture(conn, [](kj::Own<WrappedStream> conn)
                                           -> kj::Own<kj::AsyncIoStream> {
@@ -228,7 +230,7 @@ namespace snej::shs {
 
 
     kj::Promise<kj::AuthenticatedStream> StreamWrapper::wrap(kj::AuthenticatedStream stream) {
-        auto conn = kj::heap<WrappedStream>(kj::mv(stream.stream), newHandshake(), _authorizer);
+        auto conn = kj::heap<WrappedStream>(kj::mv(stream.stream), newHandshake(), _authorizer, _isSocket);
         auto promise = conn->connect();
         KJ_IF_MAYBE(timeout, _connectTimeout) {
             promise = KJ_REQUIRE_NONNULL(_connectTimer)->afterDelay(*timeout).then([]() -> kj::Promise<void> {
