@@ -32,9 +32,9 @@ namespace snej::shs {
         /// @param readerOpts  Options for reading incoming serialized messages.
         SecretRPCServer(kj::Own<ServerWrapper> shsWrapper,
                         MainInterfaceFactory mainInterface,
-                        kj::StringPtr bindAddress = "*",
-                        uint16_t defaultPort = 0,
-                        capnp::ReaderOptions readerOpts = {});
+                        kj::StringPtr bindAddress,
+                        uint16_t defaultPort,
+                        capnp::ReaderOptions readerOpts);
 
         ~SecretRPCServer() noexcept(false);
 
@@ -56,7 +56,7 @@ namespace snej::shs {
         /// Connects a (promised) stream to the server, as though a client had connected.
         /// Used for testing.
         void acceptStream(kj::Promise<kj::AuthenticatedStream> streamPromise,
-                          capnp::ReaderOptions readerOpts);
+                          capnp::ReaderOptions readerOpts = {});
 
     private:
         struct Impl;
