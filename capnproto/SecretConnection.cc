@@ -71,9 +71,10 @@ namespace snej::shs {
 
 
         kj::Promise<Session> runHandshake() {
+            std::string address = getPeerName();
             if (_handshake->finished()) {
                 auto result = _handshake->session();
-                KJ_LOG(INFO, "SecretHandshake completed");
+                KJ_LOG(INFO, "SecretHandshake completed", address);
                 _handshake = nullptr;
                 if (_authorizer && !_authorizer(result.peerPublicKey))
                     return KJ_EXCEPTION(DISCONNECTED, "Unauthorized client key");
@@ -91,7 +92,7 @@ namespace snej::shs {
                     return runHandshake(); // continue
                 });
             } else {
-                KJ_LOG(ERROR, "SecretHandshake failed!");
+                KJ_LOG(ERROR, "SecretHandshake failed!", address);
                 assert(_handshake->failed());
                 return KJ_EXCEPTION(DISCONNECTED, "SecretHandshake protocol failed to connect");
             }
@@ -100,7 +101,7 @@ namespace snej::shs {
 
         kj::Promise<void> connect() {
             std::string address = getPeerName();
-            KJ_LOG(INFO, "Beginning SecretHandshake with peer ", address);
+            KJ_LOG(INFO, "Beginning SecretHandshake", address);
 
             return runHandshake().then([this](Session result) {
                 _session = result;

@@ -133,6 +133,8 @@ namespace snej::shs {
         /// After the handshake is finished, this returns the results to use for communication.
         Session session();
 
+        virtual ~Handshake();
+
     protected:
         enum Step {
             Failed = 0,
@@ -144,7 +146,6 @@ namespace snej::shs {
         };
 
         explicit Handshake(Context const&);
-        virtual ~Handshake();
         void nextStep();
         virtual size_t _byteCountNeeded() =0;                    // # bytes to read at this step
         virtual bool _receivedBytes(const uint8_t*) =0;          // process received bytes
