@@ -113,4 +113,24 @@ namespace snej::shs {
         return getMain().castAs<Type>();
     }
 
+
+    /** Automatically manages an AsyncIoContext per thread.
+        Just call RPCContext::getThreadLocal. Hang onto the reference for as long as
+        you need to do RPC stuff. */
+    class RPCContext: public kj::Refcounted {
+    public:
+        static kj::Own<RPCContext> getThreadLocal();
+
+        kj::AsyncIoContext& getIoContext()                   {return ioContext;}
+        kj::WaitScope& getWaitScope()                        {return ioContext.waitScope;}
+        kj::AsyncIoProvider& getIoProvider()                 {return *ioContext.provider;}
+        kj::LowLevelAsyncIoProvider& getLowLevelIoProvider() {return *ioContext.lowLevelProvider;}
+
+        // do not call these
+        RPCContext();
+        ~RPCContext() noexcept(false);
+
+    private:
+        kj::AsyncIoContext ioContext;
+    };
 }

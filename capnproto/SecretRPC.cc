@@ -37,48 +37,30 @@
 namespace snej::shs {
     using namespace capnp;
 
-    class SecretRPCContext;
+    class RPCContext;
 
-    KJ_THREADLOCAL_PTR(SecretRPCContext) threadSecretContext = nullptr;
+    KJ_THREADLOCAL_PTR(RPCContext) threadSecretContext = nullptr;
 
-    class SecretRPCContext: public kj::Refcounted {
-    public:
-        SecretRPCContext(): ioContext(kj::setupAsyncIo()) {
-            threadSecretContext = this;
+    RPCContext::RPCContext(): ioContext(kj::setupAsyncIo()) {
+        threadSecretContext = this;
+    }
+
+    RPCContext::~RPCContext() noexcept(false) {
+        KJ_REQUIRE(threadSecretContext == this,
+                   "SecretRPCContext destroyed from different thread than it was created.") {
+            return;
         }
+        threadSecretContext = nullptr;
+    }
 
-        ~SecretRPCContext() noexcept(false) {
-            KJ_REQUIRE(threadSecretContext == this,
-                       "SecretRPCContext destroyed from different thread than it was created.") {
-                return;
-            }
-            threadSecretContext = nullptr;
+    kj::Own<RPCContext> RPCContext::getThreadLocal() {
+        RPCContext* existing = threadSecretContext;
+        if (existing != nullptr) {
+            return kj::addRef(*existing);
+        } else {
+            return kj::refcounted<RPCContext>();
         }
-
-        kj::WaitScope& getWaitScope() {
-            return ioContext.waitScope;
-        }
-
-        kj::AsyncIoProvider& getIoProvider() {
-            return *ioContext.provider;
-        }
-
-        kj::LowLevelAsyncIoProvider& getLowLevelIoProvider() {
-            return *ioContext.lowLevelProvider;
-        }
-
-        static kj::Own<SecretRPCContext> getThreadLocal() {
-            SecretRPCContext* existing = threadSecretContext;
-            if (existing != nullptr) {
-                return kj::addRef(*existing);
-            } else {
-                return kj::refcounted<SecretRPCContext>();
-            }
-        }
-
-    private:
-        kj::AsyncIoContext ioContext;
-    };
+    }
 
 
 #pragma mark - SERVER IMPL:
@@ -141,7 +123,7 @@ namespace snej::shs {
              ReaderOptions readerOpts,
              kj::Own<StreamWrapper> shsWrapper)
         :_mainInterfaceFactory(kj::mv(mainInterfaceFactory))
-        ,_context(SecretRPCContext::getThreadLocal())
+        ,_context(RPCContext::getThreadLocal())
         ,_portPromise(nullptr)
         ,_tasks(*this)
         ,_readerOptions(readerOpts)
@@ -220,7 +202,7 @@ namespace snej::shs {
         }
 
         MainInterfaceFactory                 _mainInterfaceFactory;
-        kj::Own<SecretRPCContext>            _context;
+        kj::Own<RPCContext>            _context;
         kj::ForkedPromise<uint>              _portPromise;
         kj::TaskSet                          _tasks;
         ReaderOptions                        _readerOptions;
@@ -325,7 +307,7 @@ namespace snej::shs {
         Impl(kj::Own<ClientWrapper> shsWrapper,
              ReaderOptions readerOpts,
              kj::Promise<kj::Own<kj::AsyncIoStream>> streamPromise)
-        :_context(SecretRPCContext::getThreadLocal())
+        :_context(RPCContext::getThreadLocal())
         ,_shsWrapper(kj::mv(shsWrapper))
         ,_setupPromise(ClientWrapper::asyncWrap(_shsWrapper.get(), kj::mv(streamPromise))
                        .then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
@@ -349,7 +331,7 @@ namespace snej::shs {
             return getMain().castAs<Type>();
         }
 
-        kj::Own<SecretRPCContext>           _context;
+        kj::Own<RPCContext>           _context;
         kj::Own<ClientWrapper>              _shsWrapper;
         kj::ForkedPromise<void>             _setupPromise;
         kj::Maybe<kj::Own<ClientContext>>   _clientContext; // Filled in before `setupPromise` resolves.
@@ -364,7 +346,7 @@ namespace snej::shs {
                                      uint16_t serverPort,
                                      capnp::ReaderOptions readerOpts)
     {
-        kj::Own<SecretRPCContext> context = SecretRPCContext::getThreadLocal();
+        kj::Own<RPCContext> context = RPCContext::getThreadLocal();
         auto streamPromise = context->getIoProvider()
                                      .getNetwork()
                                      .parseAddress(serverAddress, serverPort)
