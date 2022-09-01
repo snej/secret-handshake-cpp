@@ -198,7 +198,7 @@ namespace snej::shs {
         }
 
         void taskFailed(kj::Exception&& exception) override {
-            kj::throwFatalException(kj::mv(exception));
+            KJ_LOG(ERROR, "SecretRPCServer task failed", exception.getDescription());
         }
 
         MainInterfaceFactory                 _mainInterfaceFactory;

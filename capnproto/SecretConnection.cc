@@ -107,6 +107,11 @@ namespace snej::shs {
                 _session = result;
                 _encryptor.emplace(result.encryptionKey, result.encryptionNonce);
                 _decryptor.emplace(result.decryptionKey, result.decryptionNonce);
+            }, [this](kj::Exception &&x) {
+                KJ_LOG(ERROR, "SecretHandshake: Connection error", x.getDescription());
+                _inner.shutdownWrite();
+                _inner.abortRead();
+                return x;
             });
         }
 
