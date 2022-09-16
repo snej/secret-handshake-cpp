@@ -111,7 +111,7 @@ namespace snej::shs {
                 KJ_LOG(ERROR, "SecretHandshake: Connection error", x.getDescription());
                 _inner.shutdownWrite();
                 _inner.abortRead();
-                return x;
+                return std::move(x);
             });
         }
 
