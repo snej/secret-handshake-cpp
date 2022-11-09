@@ -44,6 +44,16 @@ namespace snej::shs {
 #pragma mark - STREAM:
 
 
+    std::string getPeerName(kj::AsyncIoStream& stream) {
+        char nameBuf[INET6_ADDRSTRLEN] = "";
+        sockaddr_in6 addr;
+        unsigned addrLen = sizeof(addr);
+        stream.getpeername((sockaddr*)&addr, &addrLen);
+        inet_ntop(addr.sin6_family, &addr.sin6_addr, nameBuf, sizeof(nameBuf));
+        return std::string(nameBuf);
+    }
+
+
     class WrappedStream final: public kj::AsyncIoStream {
     public:
         WrappedStream(kj::Own<kj::AsyncIoStream> stream,
@@ -126,14 +136,7 @@ namespace snej::shs {
 
 
         std::string getPeerName() {
-            if (!_isSocket)
-                return "";
-            char nameBuf[INET6_ADDRSTRLEN] = "";
-            sockaddr_in6 addr;
-            unsigned addrLen = sizeof(addr);
-            getpeername((sockaddr*)&addr, &addrLen);
-            inet_ntop(addr.sin6_family, &addr.sin6_addr, nameBuf, sizeof(nameBuf));
-            return std::string(nameBuf);
+            return _isSocket ? snej::shs::getPeerName(*this) : "";
         }
 
 

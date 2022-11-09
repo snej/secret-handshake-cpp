@@ -33,6 +33,7 @@
 #include <kj/async-io.h>
 #include <kj/threadlocal.h>
 #include <map>
+#include <string>
 
 namespace snej::shs {
     using namespace capnp;
@@ -153,17 +154,21 @@ namespace snej::shs {
 
         void acceptLoop() {
             KJ_LOG(INFO, "SecretRPCServer now accepting connections...");
-            auto streamPromise = _listener->acceptAuthenticated();
-            streamPromise = StreamWrapper::asyncWrap(_shsWrapper.get(), kj::mv(streamPromise));
-            _tasks.add(streamPromise.then([this](kj::AuthenticatedStream&& stream) {
-                KJ_LOG(INFO, "SecretRPCServer received connection");
-                acceptLoop();
-                startConnection(kj::mv(stream), _readerOptions);
-            },
-                                          [this](kj::Exception &&x) {
-                KJ_LOG(ERROR, "SecretRPCServer failed to open connection");
-                acceptLoop();
-            }));
+            _tasks.add(_listener->acceptAuthenticated()
+                       .then([this](kj::AuthenticatedStream&& stream) {
+                           std::string from = getPeerName(*stream.stream);
+                           KJ_LOG(INFO, "SecretRPCServer accepted socket", from);
+                           acceptLoop();
+                           auto &timer = _context->getIoProvider().getTimer();
+                           return timer.timeoutAfter(15 * kj::SECONDS,
+                                                     _shsWrapper->wrap(kj::mv(stream)));
+                       }, [this](kj::Exception &&x) {
+                           KJ_LOG(ERROR, "SecretRPCServer failed to accept socket");
+                           acceptLoop();
+                           return nullptr;
+                       }).then([this](kj::AuthenticatedStream&& secretStream) {
+                           startConnection(kj::mv(secretStream), _readerOptions);
+                       }));
         }
 
         void acceptStream(kj::Promise<kj::AuthenticatedStream> &&streamPromise,
@@ -176,6 +181,8 @@ namespace snej::shs {
         }
 
         void startConnection(kj::AuthenticatedStream&& stream, ReaderOptions readerOpts) {
+            std::string from = getPeerName(*stream.stream);
+            KJ_LOG(INFO, "SecretRPCServer starting RPC connection", from);
             auto peerID = dynamic_cast<const shs::SHSPeerIdentity*>(stream.peerIdentity.get());
             auto mainInterface = _mainInterfaceFactory(peerID);
 

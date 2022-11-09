@@ -60,7 +60,6 @@ namespace snej::shs {
     };
 
 
-
     /// Cap'n Proto AsyncStream wrapper factory for SecretHandshake server (incoming) connections.
     class ServerWrapper final : public StreamWrapper {
     public:
@@ -69,7 +68,7 @@ namespace snej::shs {
         /// @param auth  Callback that accepts or rejects a client given its public key.
         explicit ServerWrapper(Context const& context,
                                Authorizer auth)
-            :StreamWrapper(context) {_authorizer = kj::mv(auth);}
+        :StreamWrapper(context) {_authorizer = kj::mv(auth);}
 
         Authorizer const& authorizer() const                {return _authorizer;}
 
@@ -87,7 +86,7 @@ namespace snej::shs {
         /// @param serverKey  The server's public key. The handshake will verify this.
         ClientWrapper(Context const& context,
                       PublicKey const& serverKey)
-            :StreamWrapper(context) ,_serverPublicKey(serverKey) { }
+        :StreamWrapper(context) ,_serverPublicKey(serverKey) { }
 
         PublicKey const& serverPublicKey() const            {return _serverPublicKey;}
 
@@ -105,7 +104,7 @@ namespace snej::shs {
     public:
         SHSPeerIdentity(PublicKey const& key,
                         kj::Own<kj::PeerIdentity> inner)
-            :_publicKey(key), _inner(kj::mv(inner)) { }
+        :_publicKey(key), _inner(kj::mv(inner)) { }
 
         kj::String toString() override;
 
@@ -119,4 +118,8 @@ namespace snej::shs {
         PublicKey const           _publicKey;
         kj::Own<kj::PeerIdentity> _inner;
     };
+
+
+    /// Utility function to get the human-readable IP address of the peer.
+    std::string getPeerName(kj::AsyncIoStream& stream);
 }
