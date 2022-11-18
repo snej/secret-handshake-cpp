@@ -43,22 +43,22 @@ For the C++ code implementing this, look at `shs.cc` in this repo.
 
 ### Protocol:
 
-0. **ephemeral keys**  
-    client generates *(a, ap)*, server generates *(b, bp)*
-1. **client challenge**  
-   client sends ⟹ *hmac\[K](ap) | ap*
-2. **server challenge**  
-   server verifies client challenge; learns _ap_
-   server sends ⟹ *hmac\[K](bp) | bp*
-3. **client auth**  
-   client verifies server challenge; learns _bp_
-   client sends ⟹ *box\[K | a·b | a·B](H)*
-   where *H = sign\[A](K | Bp | hash(a·b)) | Ap*
-4. **server ack**  
-   server decrypts client auth, verifies signature; learns _Ap_
-   server sends ⟹ *box\[K | a·b | a·B | A·b](sign\[B](K | H | hash(a·b)))*
-5. **client validates ack**  
-   client decrypts server ack, verifies signature
+0. **ephemeral keys**
+   - client generates *(a, ap)*, server generates *(b, bp)*
+1. **client challenge**
+   - client sends ⟹ *hmac\[K](ap) | ap*
+2. **server challenge**
+   - server verifies client challenge; learns _ap_
+   - server sends ⟹ *hmac\[K](bp) | bp*
+3. **client auth**
+   - client verifies server challenge; learns _bp_
+   - client sends ⟹ *box\[K | a·b | a·B](H)*
+   - where *H = sign\[A](K | Bp | hash(a·b)) | Ap*
+4. **server ack**
+   - server decrypts client auth, verifies signature; learns _Ap_
+   - server sends ⟹ *box\[K | a·b | a·B | A·b](sign\[B](K | H | hash(a·b)))*
+5. **client validates ack**
+   - client decrypts server ack, verifies signature
 
 If any verification fails, that peer immediately terminates the connection.
 
