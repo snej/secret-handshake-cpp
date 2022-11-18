@@ -8,8 +8,8 @@ For the C++ code implementing this, look at `shs.cc` in this repo.
 
 ## Terminology:
 
-"A" means the peer who's initiating the connection, usually called the "client"; 
-"B" means the peer accepting the connection, usually called the "server".
+"A" is Alice, the peer who's initiating the connection, usually called the "client"; 
+"B" is Bob, the peer accepting the connection, usually called the "server".
 
 | Name      | Description                          |
 | --------- | ------------------------------------ |
@@ -43,21 +43,21 @@ For the C++ code implementing this, look at `shs.cc` in this repo.
 
 ### Protocol:
 
-0. **ephemeral keys**
+0. **ephemeral keys**  
     client generates *(a, ap)*, server generates *(b, bp)*
-1. **client challenge**
+1. **client challenge**  
    client sends ⟹ *hmac\[K](ap) | ap*
-2. **server challenge**
+2. **server challenge**  
    server verifies client challenge; learns _ap_
    server sends ⟹ *hmac\[K](bp) | bp*
-3. **client auth**
+3. **client auth**  
    client verifies server challenge; learns _bp_
    client sends ⟹ *box\[K | a·b | a·B](H)*
    where *H = sign\[A](K | Bp | hash(a·b)) | Ap*
-4. **server ack**
+4. **server ack**  
    server decrypts client auth, verifies signature; learns _Ap_
    server sends ⟹ *box\[K | a·b | a·B | A·b](sign\[B](K | H | hash(a·b)))*
-5. **client validates ack**
+5. **client validates ack**  
    client decrypts server ack, verifies signature
 
 If any verification fails, that peer immediately terminates the connection.
@@ -76,7 +76,7 @@ Both derive the following keys & nonces:
 - Client encryption key:  *hash(hash(hash(SS)) | Bp)*
 - Client nonce:           *hmac\[K](bp)*   [only 1st 24 bytes needed]
 - Server encryption key:  *hash(hash(hash(SS)) | Ap)*
-- Server nonce:           *hmac\[K](ap)   [only 1st 24 bytes needed]*
+- Server nonce:           *hmac\[K](ap)*   [only 1st 24 bytes needed]
 
 They can now communicate using these. Any 256-bit symmetric cipher will work; the Scuttlebutt “box-stream” protocol uses the same secret-box as before, i.e. XSalsa20 prefixed with a Poly1305 MAC.
 
