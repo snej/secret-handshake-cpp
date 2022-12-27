@@ -283,3 +283,59 @@ namespace snej::shs {
 
 
 }
+
+
+#pragma mark - C GLUE:
+
+
+#include "SecretStream.h"
+
+using namespace snej::shs;
+
+
+static inline auto external(EncryptoBox *box) {return (SHSEncryptoBox*)box;}
+static inline auto external(DecryptoBox *box) {return (SHSDecryptoBox*)box;}
+
+static inline auto internal(SHSEncryptoBox *box) {return (EncryptoBox*)box;}
+static inline auto internal(SHSDecryptoBox *box) {return (DecryptoBox*)box;}
+
+static inline auto& internal(SHSInputBuffer const& buf) {return (input_data const&)buf;}
+static inline auto& internal(SHSInputBuffer *buf) {return (input_data&)*buf;}
+static inline auto& internal(SHSOutputBuffer *buf) {return (output_buffer&)*buf;}
+
+
+SHSEncryptoBox* SHSEncryptoBox_Create(const SHSSession *session, SHSCryptoBoxProtocol protocol) {
+    return external( new EncryptoBox(*(Session*)session, (CryptoBox::Protocol)protocol) );
+}
+
+void SHSEncryptoBox_Free(SHSEncryptoBox *box) {
+    delete internal(box);
+}
+
+size_t SHSEncryptoBox_GetEncryptedSize(SHSEncryptoBox *box, size_t inputSize) {
+    return internal(box)->encryptedSize(inputSize);
+
+}
+
+SHSStatus SHSEncryptoBox_Encrypt(SHSEncryptoBox *box, SHSInputBuffer in, SHSOutputBuffer* out) {
+    return (SHSStatus)internal(box)->encrypt(internal(in), internal(out));
+}
+
+SHSDecryptoBox* SHSDecryptoBox_Create(const SHSSession *session, SHSCryptoBoxProtocol protocol) {
+    return external( new DecryptoBox(*(Session*)session, (CryptoBox::Protocol)protocol));
+}
+
+void SHSDecryptoBox_Free(SHSDecryptoBox *box) {
+    delete internal(box);
+}
+
+SHSStatus SHSDecryptoBox_GetDecryptedSize(SHSDecryptoBox *box, SHSInputBuffer in, size_t *outSize) {
+    auto result = internal(box)->getDecryptedSize(internal(in));
+    *outSize = result.second;
+    return (SHSStatus)result.first;
+}
+
+SHSStatus SHSDecryptoBox_Decrypt(SHSDecryptoBox *box, SHSInputBuffer *in, SHSOutputBuffer *out) {
+    return (SHSStatus) internal(box)->decrypt(internal(in), internal(out));
+}
+

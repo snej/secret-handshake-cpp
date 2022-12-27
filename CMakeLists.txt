@@ -55,6 +55,7 @@ add_executable( SecretHandshakeTests
     vendor/monocypher-cpp/tests/MonocypherCppTests.cc
     tests/shsTests.cc
     tests/SecretHandshakeTests.cc
+    tests/SecretHandshakeTests.c
     vendor/shs1-c/src/shs1.c
 )
 

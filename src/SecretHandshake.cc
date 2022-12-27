@@ -286,3 +286,102 @@ namespace snej::shs {
     }
 
 }
+
+
+#pragma mark - C GLUE:
+
+
+#include "SecretHandshake.h"
+
+using namespace snej::shs;
+
+static inline SHSHandshake* external(Handshake* h)   {return (SHSHandshake*)h;}
+static inline Handshake* internal(SHSHandshake* h)   {return (Handshake*)h;}
+
+
+void SHSErase(void *dst, size_t size) {
+    monocypher::wipe(dst, size);
+}
+
+SHSKeyPair SHSKeyPair_Generate(void) {
+    auto pair = KeyPair::generate();
+    return (const SHSKeyPair&)pair;
+}
+
+SHSKeyPair SHSKeyPair_Regenerate(const SHSSigningKey* signingKey) {
+    KeyPair pair(*(SigningKey*)signingKey);
+    return (const SHSKeyPair&)pair;
+}
+
+SHSAppID SHSAppID_FromString(const char* str) {
+    auto id = Context::appIDFromString(str);
+    return (const SHSAppID&)id;
+}
+
+SHSHandshake* SHSHandshake_CreateClient(const SHSAppID *appID,
+                                        const SHSKeyPair *keyPair,
+                                        const SHSPublicKey *serverPublicKey)
+{
+    Context ctx((AppID&)*appID, (KeyPair&)*keyPair);
+    return external(new ClientHandshake(ctx, (PublicKey&)*serverPublicKey));
+}
+
+SHSHandshake* SHSHandshake_CreateServer(const SHSAppID *appID,
+                                        const SHSKeyPair *keyPair) {
+    Context ctx((AppID&)*appID, (KeyPair&)*keyPair);
+    return external(new ServerHandshake(ctx));
+}
+
+
+void SHSHandshake_Free(SHSHandshake *h) {
+    delete internal(h);
+}
+
+
+SHSOutputBuffer SHSHandshake_GetBytesToRead(SHSHandshake *h) {
+    auto buf = internal(h)->bytesToRead();
+    return {buf.first, buf.second};
+}
+
+
+bool SHSHandshake_ReadCompleted(SHSHandshake *h) {
+    return internal(h)->readCompleted();
+}
+
+
+intptr_t SHSHandshake_ReceivedBytes(SHSHandshake *h, const void *src, size_t count) {
+    return internal(h)->receivedBytes(src, count);
+}
+
+
+SHSInputBuffer SHSHandshake_GetBytesToSend(SHSHandshake *h) {
+    auto buf = internal(h)->bytesToSend();
+    return {buf.first, buf.second};
+}
+
+
+void SHSHandshake_SendCompleted(SHSHandshake *h) {
+    internal(h)->sendCompleted();
+}
+
+
+intptr_t SHSHandshake_CopyBytesToSend(SHSHandshake *h, void *dst, size_t capacity) {
+    return internal(h)->copyBytesToSend(dst, capacity);
+}
+
+
+bool SHSHandshake_Failed(SHSHandshake *h) {
+    return internal(h)->failed();
+}
+
+
+bool SHSHandshake_Finished(SHSHandshake *h) {
+    return internal(h)->finished();
+}
+
+
+SHSSession SHSHandshake_GetSession(SHSHandshake *h) {
+    Session s = internal(h)->session();
+    return (SHSSession&)s;
+}
+

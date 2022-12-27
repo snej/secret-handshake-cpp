@@ -115,9 +115,8 @@ namespace snej::shs {
         void sendCompleted();
 
         /// Alternative sending API; use instead of `bytesToSend` and `sendCompleted`.
-        /// Pass it a buffer and the buffer's size, and it will return
-        /// the number of bytes from the buffer that were sent.
-        /// Call after constructor, and after calling `receivedBytes`.
+        /// Pass it a buffer and the buffer's size. It will copy any output to the buffer, and return the
+        /// number of bytes to send.
         /// @param dst  The buffer to copy the bytes to.
         /// @param maxCount  The size of the buffer.
         /// @return  The number of bytes written to the buffer. -1 on error.

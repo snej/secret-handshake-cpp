@@ -128,6 +128,20 @@ TEST_CASE_METHOD(HandshakeTest, "Handshake with wrong server key", "[SecretHands
 }
 
 
+extern "C" {
+    bool test_C_Handshake(void);
+    bool test_C_HandshakeWrongServerKey(void);
+}
+
+TEST_CASE("C Handshake", "[SecretHandshake]") {
+    CHECK(test_C_Handshake());
+}
+
+TEST_CASE("C Handshake with wrong server key", "[SecretHandshake]") {
+    CHECK(test_C_HandshakeWrongServerKey());
+}
+
+
 struct SessionTest {
     Session session1, session2;
 
