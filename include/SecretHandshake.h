@@ -26,6 +26,8 @@ extern "C" {
 
 #define SHSKey_Erase(KEY) SHSErase(&(KEY).bytes, sizeof(KEY))
 
+    static inline void SHSSigningKey_Erase(SHSSigningKey *key)    {SHSKey_Erase(*key);}
+
     typedef struct {
         SHSSigningKey signingKey;
         SHSPublicKey  publicKey;
@@ -75,6 +77,12 @@ extern "C" {
         size_t size;        ///< Number of bytes available at `dst`
     } SHSOutputBuffer;
 
+    typedef enum {
+        SHSNoError,            ///< No error yet
+        SHSProtocolError,      ///< The peer does not use SecretHandshake, or a different AppID.
+        SHSAuthError,          ///< Server has different public key, or doesn't like the client's.
+    } SHSError;
+
 
     /// Opaque reference to an object that runs the SecretHandshake protocol.
     typedef struct SHSHandshake SHSHandshake;
@@ -96,15 +104,22 @@ extern "C" {
     /// Frees memory allocated by the handshake, and securely erases private keys.
     void SHSHandshake_Free(SHSHandshake*);
 
-    /// Returns the number of bytes the handshake wants to read, and a buffer to put them in.
-    /// The returned size may be 0, if nothing needs to be read.
-    SHSOutputBuffer SHSHandshake_GetBytesToRead(SHSHandshake*);
+    /// Returns the number of bytes the handshake wants to read. May be 0.
+    size_t SHSHandshake_GetBytesNeeded(SHSHandshake*);
 
-    /// Call this after all bytes have been copied into the buffer returned by `GetBytesToRead`.
+    /// Returns a buffer to copy bytes received to. Its size is `GetBytesNeeded`.
+    void* SHSHandshake_GetInputBuffer(SHSHandshake*);
+
+    static inline SHSOutputBuffer SHSHandshake_GetBytesToRead(SHSHandshake *h) {
+        SHSOutputBuffer buf = {SHSHandshake_GetInputBuffer(h), SHSHandshake_GetBytesNeeded(h)};
+        return buf;
+    }
+
+    /// Call this after all bytes have been copied into the buffer returned by `GetInputBuffer`.
     /// @return  True if the data is valid, false if the handshake has failed.
     bool SHSHandshake_ReadCompleted(SHSHandshake*);
 
-    /// Alternative read API; use instead of `GetBytesToRead` and `ReadCompleted`.
+    /// Alternative read API; use instead of `GetInputBuffer`.
     /// Call this when data is received from the peer.
     /// @param src  The received data.
     /// @param count  The number of bytes received.
@@ -127,9 +142,9 @@ extern "C" {
     /// @return  The number of bytes written to the buffer. -1 on error.
     intptr_t SHSHandshake_CopyBytesToSend(SHSHandshake*, void *dst, size_t capacity);
 
-    /// True if the handshake has failed. (If so, you should close the socket.)
+    /// The current error. (If not `SHSNoError`, you should close the socket.)
     /// Check this after sending and receiving data.
-    bool SHSHandshake_Failed(SHSHandshake*);
+    SHSError SHSHandshake_GetError(SHSHandshake*);
 
     /// True if the handshake is complete and successful.
     /// Check this after sending and receiving data.

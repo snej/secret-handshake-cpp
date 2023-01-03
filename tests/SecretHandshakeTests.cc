@@ -85,9 +85,11 @@ struct HandshakeTest {
         auto toRead = dst.bytesToRead();
         CHECK(toRead.second == toSend.second);
         memcpy(toRead.first, toSend.first, toSend.second);
-        dst.readCompleted();
         src.sendCompleted();
-        return !src.failed() && !dst.failed();
+        CHECK(!src.error());
+        bool ok = dst.readCompleted();
+        CHECK(ok == (dst.error() == Handshake::NoError));
+        return ok;
     }
 };
 
@@ -124,7 +126,7 @@ TEST_CASE_METHOD(HandshakeTest, "Handshake with wrong server key", "[SecretHands
     CHECK(sendFromTo(badClient, server,  64));
     CHECK(sendFromTo(server, badClient,  64));
     CHECK(!sendFromTo(badClient, server, 112));
-    CHECK(server.failed());
+    CHECK(server.error() == Handshake::AuthError);
 }
 
 

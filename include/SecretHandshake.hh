@@ -91,6 +91,9 @@ namespace snej::shs {
     /// Superclass of ClientHandshake and ServerHandshake.
     class Handshake {
     public:
+        /// Returns the number of bytes the handshake wants to read.
+        virtual size_t byteCountNeeded() =0;
+
         /// Returns the number of bytes the handshake wants to read, and a buffer to put them in.
         /// The returned size may be 0, if nothing needs to be read.
         std::pair<void*, size_t> bytesToRead();
@@ -98,6 +101,11 @@ namespace snej::shs {
         /// Call this after all bytes have been copied into the buffer returned by `bytesToRead`.
         /// @return  True if the data is valid, false if the handshake has failed.
         bool readCompleted();
+
+        /// Call this if the input stream was closed by the peer before requested bytes could be
+        /// read. At this point the handshake has of course failed; calling this method will set
+        /// the `error` property appropriately.
+        void readFailed();
 
         /// Alternative read API; use instead of `bytesToRead` and `readCompleted`.
         /// Call this when data is received from the peer.
@@ -122,8 +130,15 @@ namespace snej::shs {
         /// @return  The number of bytes written to the buffer. -1 on error.
         intptr_t copyBytesToSend(void *dst, size_t maxCount);
 
-        /// True if the handshake has failed. You should close the socket.
-        bool failed()                  {return _step == Failed;}
+        enum Error {
+            NoError,            ///< No error yet
+            ProtocolError,      ///< The peer does not use SecretHandshake, or a different AppID.
+            AuthError,          ///< Server has different public key, or doesn't like the client's.
+        };
+
+        /// Current error; if not None, the handshake has failed and you should close the socket.
+        /// Call this after `receivedBytes` and `bytesToSend`.
+        Error error()                  {return _error;}
 
         /// Becomes true when the handshake is complete.
         /// Call this after `receivedBytes` and `bytesToSend`.
@@ -146,12 +161,13 @@ namespace snej::shs {
 
         explicit Handshake(Context const&);
         void nextStep();
-        virtual size_t _byteCountNeeded() =0;                    // # bytes to read at this step
+        void failed();
         virtual bool _receivedBytes(const uint8_t*) =0;          // process received bytes
         virtual void _fillOutputBuffer(std::vector<uint8_t>&) =0;// Resize & fill vector with output
 
         Context                 _context;                   // App ID and local key-pair
         Step                    _step = ClientChallenge;    // Current step in protocol, or Failed
+        Error                   _error = NoError;           // Current error
         std::unique_ptr<impl::handshake> _impl;             // Crypto implementation object
     private:
         std::vector<uint8_t>    _inputBuffer;               // Unread bytes
@@ -168,8 +184,9 @@ namespace snej::shs {
         /// @param serverPublicKey  The server's identity. If this is incorrect the handshake fails.
         ClientHandshake(Context const& context,
                         PublicKey const& serverPublicKey);
+        
+        size_t byteCountNeeded() override;
     protected:
-        size_t _byteCountNeeded() override;
         bool _receivedBytes(const uint8_t *bytes) override;
         void _fillOutputBuffer(std::vector<uint8_t>&) override;
     };
@@ -183,8 +200,8 @@ namespace snej::shs {
         /// @param context  The application ID and the server's key-pair.
         explicit ServerHandshake(Context const& context);
 
+        size_t byteCountNeeded() override;
     protected:
-        size_t _byteCountNeeded() override;
         bool _receivedBytes(const uint8_t *bytes) override;
         void _fillOutputBuffer(std::vector<uint8_t>&) override;
     };

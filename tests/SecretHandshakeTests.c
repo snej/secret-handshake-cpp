@@ -59,7 +59,7 @@ static void freeHandshakeTest(HandshakeTest *test) {
 
 static bool sendFromTo(SHSHandshake *src, SHSHandshake *dst, size_t expectedCount) {
     // One step of the handshake:
-    CHECK(SHSHandshake_GetBytesToRead(src).size == 0);
+    CHECK(SHSHandshake_GetBytesNeeded(src) == 0);
     CHECK(SHSHandshake_GetBytesToSend(dst).size == 0);
     SHSInputBuffer toSend = SHSHandshake_GetBytesToSend(src);
     CHECK(toSend.size == expectedCount);
@@ -68,7 +68,7 @@ static bool sendFromTo(SHSHandshake *src, SHSHandshake *dst, size_t expectedCoun
     memcpy(toRead.dst, toSend.src, toSend.size);
     SHSHandshake_ReadCompleted(dst);
     SHSHandshake_SendCompleted(src);
-    return !SHSHandshake_Failed(src) && !SHSHandshake_Failed(dst);
+    return !SHSHandshake_GetError(src) && !SHSHandshake_GetError(dst);
 }
 
 
@@ -118,7 +118,7 @@ bool test_C_HandshakeWrongServerKey() {
     REQUIRE(sendFromTo(badClient, test.server,  64));
     REQUIRE(sendFromTo(test.server, badClient,  64));
     REQUIRE(!sendFromTo(badClient, test.server, 112));
-    REQUIRE(SHSHandshake_Failed(test.server));
+    REQUIRE(SHSHandshake_GetError(test.server) == SHSAuthError);
 
     SHSHandshake_Free(badClient);
     freeHandshakeTest(&test);

@@ -102,8 +102,8 @@ namespace snej::shs {
                     return runHandshake(); // continue
                 });
             } else {
-                KJ_LOG(ERROR, "SecretHandshake failed!", address);
-                assert(_handshake->failed());
+                KJ_LOG(ERROR, "SecretHandshake failed!", address, _handshake->error());
+                assert(_handshake->error());
                 return KJ_EXCEPTION(DISCONNECTED, "SecretHandshake protocol failed to connect");
             }
         }

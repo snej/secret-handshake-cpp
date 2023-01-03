@@ -93,7 +93,7 @@ namespace snej::shs {
 
 
     std::pair<void*, size_t> Handshake::bytesToRead() {
-        size_t needed = _byteCountNeeded();
+        size_t needed = byteCountNeeded();
         if (needed > 0)
             LOG "Step " << _step << "/4: Awaiting " << needed << " bytes...\n";
         _inputBuffer.resize(needed);
@@ -102,7 +102,7 @@ namespace snej::shs {
 
 
     bool Handshake::readCompleted() {
-        if (_inputBuffer.size() != _byteCountNeeded())
+        if (_inputBuffer.size() != byteCountNeeded())
             throw std::logic_error("Unexpected call to Handshake::readCompleted");
         if (_receivedBytes(_inputBuffer.data()) > 0) {
             LOG "          ...OK!\n";
@@ -111,16 +111,28 @@ namespace snej::shs {
             return true;
         } else {
             LOG "          ...invalid data; HANDSHAKE FAILED\n";
-            _step = Failed;
+            failed();
             return false;
         }
+    }
+
+
+    void Handshake::readFailed() {
+        LOG "          ...unexpected EOF; HANDSHAKE FAILED\n";
+        failed();
+    }
+
+
+    void Handshake::failed() {
+        _error = (_step < ClientAuth) ? Error::ProtocolError : Error::AuthError;
+        _step = Failed;
     }
 
 
     intptr_t Handshake::receivedBytes(const void *src, size_t count) {
         if (_step == Failed || _step == Finished)
             return -1;
-        size_t needed = _byteCountNeeded();
+        size_t needed = byteCountNeeded();
         if (needed == 0)
             return 0;
         count = std::min(count, needed - _inputBuffer.size());
@@ -203,6 +215,20 @@ namespace snej::shs {
 #pragma mark - CLIENT:
 
 
+    /* Notes on interpreting client-side failures:
+     - EOF before receiving the server challenge:
+         - It's not a SecretHandshake server
+         - It doesn't use the same AppID
+     - Invalid server challenge:
+         - It's not a SecretHandshake server
+     - EOF before receiving the server ack:
+         - Server has a different public key
+         - Server doesn't allow connections from your public key
+
+     Data corruption or a MITM altering data is also possible.
+     */
+
+
     ClientHandshake::ClientHandshake(Context const& context,
                                      PublicKey const& theirPublicKey)
     :Handshake(context)
@@ -211,7 +237,7 @@ namespace snej::shs {
     }
 
 
-    size_t ClientHandshake::_byteCountNeeded() {
+    size_t ClientHandshake::byteCountNeeded() {
         switch (_step) {
             case ServerChallenge:  return sizeof(impl::ChallengeData);
             case ServerAck:        return sizeof(impl::ServerAckData);
@@ -254,7 +280,7 @@ namespace snej::shs {
     { }
 
 
-    size_t ServerHandshake::_byteCountNeeded() {
+    size_t ServerHandshake::byteCountNeeded() {
         switch (_step) {
             case ClientChallenge:  return sizeof(impl::ChallengeData);
             case ClientAuth:       return sizeof(impl::ClientAuthData);
@@ -338,9 +364,13 @@ void SHSHandshake_Free(SHSHandshake *h) {
 }
 
 
-SHSOutputBuffer SHSHandshake_GetBytesToRead(SHSHandshake *h) {
-    auto buf = internal(h)->bytesToRead();
-    return {buf.first, buf.second};
+size_t SHSHandshake_GetBytesNeeded(SHSHandshake *h) {
+    return internal(h)->byteCountNeeded();
+}
+
+
+void* SHSHandshake_GetInputBuffer(SHSHandshake *h) {
+    return internal(h)->bytesToRead().first;
 }
 
 
@@ -370,8 +400,8 @@ intptr_t SHSHandshake_CopyBytesToSend(SHSHandshake *h, void *dst, size_t capacit
 }
 
 
-bool SHSHandshake_Failed(SHSHandshake *h) {
-    return internal(h)->failed();
+SHSError SHSHandshake_GetError(SHSHandshake *h) {
+    return SHSError(internal(h)->error());
 }
 
 

@@ -109,14 +109,25 @@ namespace snej::shs {
         explicit DecryptoBox(Session const& session, Protocol p =CryptoBox::Compact)
         :DecryptoBox(session.decryptionKey, session.decryptionNonce, p) { }
 
-        /// Returns the size of message that the input data will decrypt to, if known.
-        /// The data doesn't need to contain a complete message, just the first few bytes.
-        /// This can be used to ensure the output buffer passed to `decrypt` has enough capacity.
+        /// The minimum number of input bytes needed for peek() to succeed.
+        size_t minPeekSize() const;
+
+        struct PeekResult {
+            status status;
+            size_t decryptedSize;
+            size_t encryptedSize;
+        };
+
+        /// Looks at the input data (which must start on a message boundary but can be incomplete)
+        /// and returns the length of the encrypted and decrypted messages.
         /// The `status` value will be:
-        /// - `Success` if the size is known; the `size_t` will be the decrypted message size.
-        /// - `IncompleteInput` if there's not enough input to determine the size
+        /// - `Success` if the size is known; `encryptedSize` and `decryptedSize` will be accurate.
+        /// - `IncompleteInput` if there's not enough input to determine the size; `decryptedSize`
+        ///   will be set to the length of input needed to determine it.
         /// - `CorruptData` if the input data is corrupted
-        std::pair<status, size_t> getDecryptedSize(input_data);
+        PeekResult peek(input_data);
+
+        std::pair<status, size_t> getDecryptedSize(input_data); // deprecated; use peek()
 
         /// Decrypts incoming data from the encrypted stream, reading the next message if it's
         /// completely available. This always reads one entire message, as passed to `encrypt`
@@ -145,7 +156,7 @@ namespace snej::shs {
         status decrypt(input_data &in, output_buffer &out);
 
     private:
-        std::pair<status, size_t> decryptBoxStreamHeader(input_data in, BoxStreamHeader &header);
+        PeekResult decryptBoxStreamHeader(input_data in, BoxStreamHeader &header);
     };
 
 

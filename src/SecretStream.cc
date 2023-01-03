@@ -118,75 +118,87 @@ namespace snej::shs {
     }
 
 
-    std::pair<status, size_t> DecryptoBox::decryptBoxStreamHeader(input_data in,
-                                                                  BoxStreamHeader &header)
+    DecryptoBox::PeekResult DecryptoBox::decryptBoxStreamHeader(input_data in,
+                                                                BoxStreamHeader &header)
     {
-        if (in.size < sizeof(MAC) + sizeof(header))
-            return {IncompleteInput, 0};
+        static constexpr size_t kPrefixSize = sizeof(MAC) + sizeof(BoxStreamHeader);
+        if (in.size < kPrefixSize)
+            return {IncompleteInput, 0, kPrefixSize};
         // The nonce has to be incremented first, because on the sending side the header was the
         // second thing to be encrypted. But leave the session's nonce alone for now.
         auto &key = (const box_stream_key&)_key;
         auto nonce = (session_nonce&)_nonce;
         ++nonce;
         auto out = key.unbox(nonce,
-                             {in.data, sizeof(MAC) + sizeof(header)},
+                             {in.data, kPrefixSize},
                              {&header, sizeof(header)});
         if (out.size != sizeof(header))
-            return {CorruptData, 0};
-        return {Success, readUint16At(header.size_be)};
+            return {CorruptData, 0, 0};
+        size_t decryptedSize = readUint16At(header.size_be);
+        return {Success, decryptedSize, kPrefixSize + decryptedSize};
     }
 
 
-    std::pair<status, size_t> DecryptoBox::getDecryptedSize(input_data in) {
+    size_t DecryptoBox::minPeekSize() const {
+        return _protocol == BoxStream ? sizeof(MAC) + sizeof(BoxStreamHeader) : 2;
+    }
+
+
+    DecryptoBox::PeekResult DecryptoBox::peek(input_data in) {
         if (_protocol == BoxStream) {
             BoxStreamHeader header;
             return decryptBoxStreamHeader(in, header);
         } else {
             if (in.size < 2)
-                return {IncompleteInput, 0};
-            return {Success, readUint16At((const uint8_t*)in.data)};
+                return {IncompleteInput, 0, 2};
+            size_t decryptedSize = readUint16At((const uint8_t*)in.data);
+            return {Success, decryptedSize, encryptedSize(decryptedSize)};
         }
+    }
+
+    std::pair<status, size_t> DecryptoBox::getDecryptedSize(input_data in) {
+        auto result = peek(in);
+        return {result.status, result.decryptedSize};
     }
 
 
     status DecryptoBox::decrypt(input_data &in, output_buffer &out) {
         auto src = (const uint8_t*)in.data;
-        status stat;
-        size_t msgSize, encSize;
+        PeekResult r;
         auto &nonce = (session_nonce&)_nonce;
         if (_protocol == BoxStream) {
             BoxStreamHeader header;
-            std::tie(stat, msgSize) = decryptBoxStreamHeader(in, header);
-            if (stat != Success)
-                return stat;
-            encSize = encryptedSize(msgSize);
-            if (in.size < encSize)
+            r = decryptBoxStreamHeader(in, header);
+            if (r.status != Success)
+                return r.status;
+            if (in.size < r.encryptedSize)
                 return IncompleteInput;
+            if (out.size < r.decryptedSize)
+                return OutTooSmall;
 
             auto &key = (const box_stream_key&)_key;
             if (!key.unlock(nonce, header.mac,
-                            {src + sizeof(MAC) + sizeof(header), msgSize},      // ciphertext
+                            {src + sizeof(MAC) + sizeof(header), r.decryptedSize},    // ciphertext
                             out.data))                                          // output plaintext
                 return CorruptData;
             ++nonce; // extra increment due to 2nd decryption
         } else {
-            std::tie(stat, msgSize) = getDecryptedSize(in);
-            if (stat != Success)
-                return stat;
-            encSize = encryptedSize(msgSize);
-            if (in.size < encSize)
+            r = peek(in);
+            if (r.status != Success)
+                return r.status;
+            if (in.size < r.encryptedSize)
                 return IncompleteInput;
-            if (out.size < msgSize)
+            if (out.size < r.decryptedSize)
                 return OutTooSmall;
 
             auto &key = (const compact_key&)_key;
-            if (key.unbox(nonce, {src + 2, encSize - 2}, {out.data, out.size}).size != msgSize)
+            if (key.unbox(nonce, {src + 2, r.encryptedSize - 2}, {out.data, out.size}).size != r.decryptedSize)
                 return CorruptData;
         }
         ++nonce;
-        out.size = msgSize;
-        in.data = src + encSize;
-        in.size -= encSize;
+        out.size = r.decryptedSize;
+        in.data = src + r.encryptedSize;
+        in.size -= r.encryptedSize;
         return Success;
     }
 
@@ -329,10 +341,13 @@ void SHSDecryptoBox_Free(SHSDecryptoBox *box) {
     delete internal(box);
 }
 
-SHSStatus SHSDecryptoBox_GetDecryptedSize(SHSDecryptoBox *box, SHSInputBuffer in, size_t *outSize) {
-    auto result = internal(box)->getDecryptedSize(internal(in));
-    *outSize = result.second;
-    return (SHSStatus)result.first;
+size_t SHSDecryptoBox_MinPeekSize(SHSDecryptoBox *box) {
+    return internal(box)->minPeekSize();
+}
+
+SHSPeekResult  SHSDecryptoBox_Peek(SHSDecryptoBox *box, SHSInputBuffer in) {
+    auto result = internal(box)->peek(internal(in));
+    return (SHSPeekResult&)result;
 }
 
 SHSStatus SHSDecryptoBox_Decrypt(SHSDecryptoBox *box, SHSInputBuffer *in, SHSOutputBuffer *out) {

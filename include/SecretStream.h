@@ -34,12 +34,12 @@ typedef enum {
 /// The nonce is incremented after each message.
 typedef struct SHSEncryptoBox SHSEncryptoBox;
 
-/// Constructs an `EncryptoBox` from the encryption key and nonce of a SHSSession.
+/// Constructs an `SHSEncryptoBox` from the encryption key and nonce of a SHSSession.
 SHSEncryptoBox* SHSEncryptoBox_Create(const SHSSession *session, SHSCryptoBoxProtocol);
 
 void SHSEncryptoBox_Free(SHSEncryptoBox*);
 
-/// The maximum byte length of a message, before encryption.
+/// Returns the encrypted size of a message. (It will be somewhat larger than the input.)
 size_t SHSEncryptoBox_GetEncryptedSize(SHSEncryptoBox*, size_t inputSize);
 
 /// Encrypts an outgoing message, attaching the MAC and size.
@@ -61,18 +61,28 @@ SHSStatus SHSEncryptoBox_Encrypt(SHSEncryptoBox*, SHSInputBuffer in, SHSOutputBu
 /// message is incomplete.
 typedef struct SHSDecryptoBox SHSDecryptoBox;
 
-/// Constructs a `DecryptoBox` from the decryption key and nonce of a SHSSession.
+typedef struct SHSPeekResult {
+    SHSStatus status;
+    size_t decryptedSize;
+    size_t encryptedSize;
+} SHSPeekResult;
+
+/// Constructs an `SHSDecryptoBox` from the decryption key and nonce of a SHSSession.
 SHSDecryptoBox* SHSDecryptoBox_Create(const SHSSession *session, SHSCryptoBoxProtocol);
+
 void SHSDecryptoBox_Free(SHSDecryptoBox*);
 
-/// Returns the size of message that the input data will decrypt to, if known.
-/// The data doesn't need to contain a complete message, just the first few bytes.
-/// This can be used to ensure the output buffer passed to `decrypt` has enough capacity.
+/// Returns the minimum number of input bytes needed for `SHSDecryptoBox_Peek` to succeed.
+size_t SHSDecryptoBox_MinPeekSize(SHSDecryptoBox*);
+
+/// Looks at the input data (which must start on a message boundary but can be incomplete)
+/// and returns the length of the encrypted and decrypted messages.
 /// The `status` value will be:
-/// - `Success` if the size is known; the `size_t` will be the decrypted message size.
-/// - `IncompleteInput` if there's not enough input to determine the size
+/// - `Success` if the size is known; `encryptedSize` and `decryptedSize` will be accurate.
+/// - `IncompleteInput` if there's not enough input to determine the size; `decryptedSize`
+///   will be set to the length of input needed to determine it.
 /// - `CorruptData` if the input data is corrupted
-SHSStatus SHSDecryptoBox_GetDecryptedSize(SHSDecryptoBox*, SHSInputBuffer, size_t *outSize);
+SHSPeekResult  SHSDecryptoBox_Peek(SHSDecryptoBox*, SHSInputBuffer);
 
 /// Decrypts incoming data from the encrypted stream, reading the next message if it's
 /// completely available. This always reads one entire message, as passed to `encrypt`
