@@ -104,7 +104,7 @@ bool test_C_Handshake(void) {
 }
 
 
-bool test_C_HandshakeWrongServerKey() {
+bool test_C_HandshakeWrongServerKey(void) {
     sTestResult = true;
     HandshakeTest test;
     initHandshakeTest(&test);
