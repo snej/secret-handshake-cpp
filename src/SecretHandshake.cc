@@ -49,7 +49,7 @@ namespace snej::shs {
     
 
     KeyPair KeyPair::generate() {
-        return KeyPair(impl::signing_key::generate());
+        return KeyPair(impl::key_pair::generate());
     }
 
 

@@ -9,7 +9,7 @@ echo "Running tests..."
 
 if [ -e Debug/SecretHandshakeTests.exe ]
 then
-    Debug/SecretHandshakeTests.exe -r list
+    Debug/SecretHandshakeTests.exe -r list "$@"
 else
-    ./SecretHandshakeTests -r list
+    ./SecretHandshakeTests -r list "$@"
 fi
