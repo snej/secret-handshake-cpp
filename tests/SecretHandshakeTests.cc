@@ -161,7 +161,7 @@ struct SessionTest {
 };
 
 
-using getSizeResult = std::pair<status, size_t>;
+using getSizeResult = std::pair<status_t, size_t>;
 
 
 TEST_CASE_METHOD(SessionTest, "Encrypted Messages", "[SecretHandshake]") {

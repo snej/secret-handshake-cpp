@@ -26,7 +26,7 @@ namespace snej::shs {
 
 
     /// Success or failure status of a `CryptoBox` / `CryptoStream` operation.
-    enum status {
+    enum status_t {
         Success,            ///< Encryption/decryption succeeded
         OutTooSmall,        ///< The output's capacity is too small
         IncompleteInput,    ///< Need more input data to decrypt
@@ -90,7 +90,7 @@ namespace snej::shs {
         ///             On entry `out.data` must be set and `out.size` must be the maximum capacity.
         ///             On success, `out.size` will be set to the encrypted size.
         /// @return  The status, either `Success` or `OutTooSmall`.
-        status encrypt(input_data in, output_buffer &out);
+        status_t encrypt(input_data in, output_buffer &out);
     };
 
 
@@ -113,7 +113,7 @@ namespace snej::shs {
         size_t minPeekSize() const;
 
         struct PeekResult {
-            status status;
+            status_t status;
             size_t decryptedSize;
             size_t encryptedSize;
         };
@@ -127,7 +127,7 @@ namespace snej::shs {
         /// - `CorruptData` if the input data is corrupted
         PeekResult peek(input_data);
 
-        std::pair<status, size_t> getDecryptedSize(input_data); // deprecated; use peek()
+        std::pair<status_t, size_t> getDecryptedSize(input_data); // deprecated; use peek()
 
         /// Decrypts incoming data from the encrypted stream, reading the next message if it's
         /// completely available. This always reads one entire message, as passed to `encrypt`
@@ -153,7 +153,7 @@ namespace snej::shs {
         ///             On input, its `data` must be set, and `size` must be the maximum capacity.
         ///             On success, its `size` will be set to the decrypted message's size.
         /// @return  The status; see the description of the 'status' enum values.
-        status decrypt(input_data &in, output_buffer &out);
+        status_t decrypt(input_data &in, output_buffer &out);
 
     private:
         PeekResult decryptBoxStreamHeader(input_data in, BoxStreamHeader &header);

@@ -89,11 +89,11 @@ namespace snej::shs::impl {
 
     // Overload `*` for Curve25519 scalar multiplication with Ed25519 keys:
     static inline kx_shared_secret operator* (signing_key const& k, kx_public_key const& pk) {
-        return key_exchange(k) * pk;
+        return k.as_key_exchange<monocypher::X25519_Raw>() * pk;
     }
 
     static inline kx_shared_secret operator* (key_exchange const& k, public_key const& pk) {
-        return k * kx_public_key(pk);
+        return k * pk.for_key_exchange<monocypher::X25519_Raw>();
     }
 
 
@@ -106,6 +106,7 @@ namespace snej::shs::impl {
     :_K(appID)
     ,_X(signingKey)
     ,_Xp(publicKey)
+    ,_x()  // randomized
     ,_xp(_x.get_public_key())
     { }
 
@@ -190,7 +191,7 @@ namespace snej::shs::impl {
     ClientAuthData handshake::createClientAuth() {
         WITH_CLIENT_VARS
         // Compute H = sign[A](K | Bp | hash(a·b)) | Ap
-        _H = A.sign(_K | Bp | _hashab.value(), Ap) | Ap;
+        _H = A.sign(_K | Bp | _hashab.value()) | Ap;
         // Return box[K | a·b | a·B](H)
         _Ab = A * bp;
         _aB = a * Bp;
@@ -243,7 +244,7 @@ namespace snej::shs::impl {
     // box[K | a·b | a·B | A·b](sign[B](K | H | hash(a·b)))
     ServerAckData handshake::createServerAck() {
         WITH_SERVER_VARS
-        return box(serverAckKey(), B.sign(_K | _H.value() | _hashab.value(), Bp));
+        return box(serverAckKey(), B.sign(_K | _H.value() | _hashab.value()));
     }
 
 }

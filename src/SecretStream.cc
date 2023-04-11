@@ -84,7 +84,7 @@ namespace snej::shs {
     }
 
 
-    status EncryptoBox::encrypt(input_data in, output_buffer &out) {
+    status_t EncryptoBox::encrypt(input_data in, output_buffer &out) {
         if (in.size > 0xFFFF)
             throw std::invalid_argument("CryptoBox message too large");
         size_t encSize = encryptedSize(in.size);
@@ -156,13 +156,13 @@ namespace snej::shs {
         }
     }
 
-    std::pair<status, size_t> DecryptoBox::getDecryptedSize(input_data in) {
+    std::pair<status_t, size_t> DecryptoBox::getDecryptedSize(input_data in) {
         auto result = peek(in);
         return {result.status, result.decryptedSize};
     }
 
 
-    status DecryptoBox::decrypt(input_data &in, output_buffer &out) {
+    status_t DecryptoBox::decrypt(input_data &in, output_buffer &out) {
         auto src = (const uint8_t*)in.data;
         PeekResult r;
         auto &nonce = (session_nonce&)_nonce;

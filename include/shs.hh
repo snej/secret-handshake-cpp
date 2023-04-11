@@ -31,7 +31,8 @@ namespace snej::shs::impl {
 
     using signing_key    = monocypher::signing_key<monocypher::Ed25519>;
     using public_key     = monocypher::public_key<monocypher::Ed25519>;
-    using signature      = signing_key::signature;
+    using key_pair       = monocypher::key_pair<monocypher::Ed25519>;
+    using signature      = key_pair::signature;
 
     using key_exchange   = monocypher::key_exchange<monocypher::X25519_Raw>;
 

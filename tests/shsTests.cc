@@ -46,23 +46,19 @@ using namespace snej::shs::impl;
 
 
 TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
-    signing_key clientSK = signing_key::generate(),   serverSK = signing_key::generate();
-    public_key  clientPK = clientSK.get_public_key(), serverPK = serverSK.get_public_key();
-    key_exchange clientEph, serverEph;
+    key_pair     clientKP = key_pair::generate(),       serverKP = key_pair::generate();
+    signing_key  clientSK = clientKP.get_seed(),        serverSK = serverKP.get_seed();
+    public_key   clientPK = clientKP.get_public_key(),  serverPK = serverKP.get_public_key();
+    key_exchange clientEph,                             serverEph;
 
 #if SHS_TESTS_COMPARE_C
     REQUIRE(::sodium_init() == 0);
     uint8_t clientKeyPair[64];
-    REQUIRE(::crypto_sign_keypair(clientPK.data(), clientKeyPair) == 0);
-    REQUIRE(::crypto_sign_ed25519_sk_to_seed(clientSK.data(), clientKeyPair) == 0);
     uint8_t serverKeyPair[64];
-    REQUIRE(::crypto_sign_keypair(serverPK.data(), serverKeyPair) == 0);
-    REQUIRE(::crypto_sign_ed25519_sk_to_seed(serverSK.data(), serverKeyPair) == 0);
-
-    REQUIRE(::crypto_box_keypair(clientEph.get_public_key().data(),
-                                 clientEph.get_secret_key().data()) == 0);
-    REQUIRE(::crypto_box_keypair(serverEph.get_public_key().data(),
-                                 serverEph.get_secret_key().data()) == 0);
+    memcpy(&clientKeyPair[0],  clientSK.data(), 32);
+    memcpy(&clientKeyPair[32], clientPK.data(), 32);
+    memcpy(&serverKeyPair[0],  serverSK.data(), 32);
+    memcpy(&serverKeyPair[32], serverPK.data(), 32);
 #else
     cout << "** NOTE: Not comparing with shs-1 C implementation **\n";
 #endif
@@ -98,13 +94,14 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
 #endif
 
     cout << "\n1. Client Challenge\n";
-    ChallengeData clientCh, cClientCh;
+    ChallengeData clientCh;
     clientCh = client.createChallenge();
     cout << "C++ client challenge: " << hexString(clientCh) << endl;
 #if SHS_TESTS_COMPARE_C
+    ChallengeData cClientCh;
     shs1_create_client_challenge(cClientCh.data(), &cClient);
     cout << "C   client challenge: " << hexString(cClientCh) << endl;
-    REQUIRE(clientCh == cClientCh);
+    CHECK(clientCh == cClientCh);
 #endif
 
     cout << "\n2. Verify Client Challenge\n";
@@ -114,13 +111,14 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
 #endif
 
     cout << "\n3. Server Challenge\n";
-    ChallengeData serverCh, cServerCh;
+    ChallengeData serverCh;
     serverCh = server.createChallenge();
     cout << "C++ server challenge: " << hexString(serverCh) << endl;
 #if SHS_TESTS_COMPARE_C
+    ChallengeData cServerCh;
     shs1_create_server_challenge(cServerCh.data(), &cServer);
     cout << "C   server challenge: " << hexString(cServerCh) << endl;
-    REQUIRE(serverCh == cServerCh);
+    CHECK(serverCh == cServerCh);
 #endif
 
     cout << "\n4. Verify Server Challenge\n";
@@ -130,13 +128,14 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
 #endif
 
     cout << "\n4. Client Auth\n";
-    ClientAuthData clientAuth, cClientAuth;
+    ClientAuthData clientAuth;
     clientAuth = client.createClientAuth();
     cout << "C++ client auth: " << hexString(clientAuth) << endl;
 #if SHS_TESTS_COMPARE_C
+    ClientAuthData cClientAuth;
     shs1_create_client_auth(cClientAuth.data(), &cClient);
     cout << "C   client auth: " << hexString(cClientAuth) << endl;
-    REQUIRE(clientAuth == cClientAuth);
+    CHECK(clientAuth == cClientAuth);
 #endif
 
     cout << "\n4. Verify Client Auth\n";
@@ -146,13 +145,14 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
 #endif
 
     cout << "\n5. Server Ack\n";
-    ServerAckData serverAck, cServerAck;
+    ServerAckData serverAck;
     serverAck = server.createServerAck();
     cout << "C++ server ack: " << hexString(serverAck) << endl;
 #if SHS_TESTS_COMPARE_C
+    ServerAckData cServerAck;
     shs1_create_server_ack(cServerAck.data(), &cServer);
     cout << "C   server ack: " << hexString(cServerAck) << endl;
-    REQUIRE(serverAck == cServerAck);
+    CHECK(serverAck == cServerAck);
 #endif
 
     cout << "\n5. Verify Server Ack\n";
@@ -194,10 +194,10 @@ TEST_CASE("shs Cpp vs C", "[SecretHandshake]") {
     cout << "C   client dec key: " << hexString(cClientDecKey) << endl;
     cout << "C   client dec non: " << hexString(cClientDecNonce) << endl;
 
-    REQUIRE(clientEncKey == cClientEncKey);
-    REQUIRE(clientEncNonce == cClientEncNonce);
-    REQUIRE(clientDecKey == cClientDecKey);
-    REQUIRE(clientDecNonce == cClientDecNonce);
+    CHECK(clientEncKey == cClientEncKey);
+    CHECK(clientEncNonce == cClientEncNonce);
+    CHECK(clientDecKey == cClientDecKey);
+    CHECK(clientDecNonce == cClientDecNonce);
 #endif
 
     REQUIRE(clientEncKey     == serverDecKey);

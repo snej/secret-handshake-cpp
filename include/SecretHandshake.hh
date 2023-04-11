@@ -7,6 +7,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -34,9 +35,8 @@ namespace snej::shs {
     /// and Monocypher's `crypto_ed25519_` API.
     using PublicKey = std::array<uint8_t, 32>;
 
-    /// A secret value that can be extracted from an Ed25519 key-pair and reused to reconstitute it.
-    /// (In the Monocypher API, this _is_ the secret key: Monocypher doesn't merge the public key
-    /// with the secret key the way Sodium does.)
+    /// A secret "seed" value that can be extracted from an Ed25519 key-pair and reused to
+    /// reconstitute it.
     using SigningKey = std::array<uint8_t, 32>;
 
     /// A 256-bit symmetrical session key.
@@ -45,6 +45,8 @@ namespace snej::shs {
     /// You could instead use it and the nonce with a stream cipher like XSalsa20; the Session
     /// class provides some utility methods for that.
     using SessionKey = std::array<uint8_t, 32>;
+
+    using KeyPairBytes = std::array<uint8_t, 64>;
 
     /// A 192-bit nonce for use with a `SessionKey`.
     using Nonce = std::array<uint8_t, 24>;
@@ -61,6 +63,14 @@ namespace snej::shs {
 
         /// Reconstitutes a key-pair from its private key alone.
         explicit KeyPair(SigningKey const&);
+
+        explicit KeyPair(KeyPairBytes const& bytes) {
+            ::memcpy(&signingKey, &bytes, sizeof(bytes));
+        }
+
+        KeyPairBytes data() const {
+            return *reinterpret_cast<KeyPairBytes const*>(&signingKey);
+        }
 
         ~KeyPair();
     private:
