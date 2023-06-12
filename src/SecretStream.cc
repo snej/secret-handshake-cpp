@@ -346,8 +346,10 @@ size_t SHSDecryptoBox_MinPeekSize(SHSDecryptoBox *box) {
 }
 
 SHSPeekResult  SHSDecryptoBox_Peek(SHSDecryptoBox *box, SHSInputBuffer in) {
-    auto result = internal(box)->peek(internal(in));
-    return (SHSPeekResult&)result;
+    DecryptoBox::PeekResult ir = internal(box)->peek(internal(in));
+    SHSPeekResult result;
+    memcpy(&result, &ir, sizeof(result));
+    return result;
 }
 
 SHSStatus SHSDecryptoBox_Decrypt(SHSDecryptoBox *box, SHSInputBuffer *in, SHSOutputBuffer *out) {
