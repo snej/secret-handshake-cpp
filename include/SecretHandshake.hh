@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -210,10 +211,18 @@ namespace snej::shs {
         /// @param context  The application ID and the server's key-pair.
         explicit ServerHandshake(Context const& context);
 
+        using ClientAuthorizer = std::function<bool(PublicKey const&)>;
+
+        /// Registers a callback that determines whether a client should be allowed to connect.
+        /// It takes the client public key as a parameter, and returns true to allow connection.
+        void setClientAuthorizer(ClientAuthorizer a)    {_clientAuth = std::move(a);}
+
         size_t byteCountNeeded() override;
     protected:
         bool _receivedBytes(const uint8_t *bytes) override;
         void _fillOutputBuffer(std::vector<uint8_t>&) override;
+
+        ClientAuthorizer _clientAuth;
     };
 
 

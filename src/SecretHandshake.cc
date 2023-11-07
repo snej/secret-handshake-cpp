@@ -291,9 +291,13 @@ namespace snej::shs {
 
     bool ServerHandshake::_receivedBytes(const uint8_t *bytes) {
         switch (_step) {
-            case ClientChallenge:  return _impl->verifyChallenge(*(impl::ChallengeData*)bytes);
-            case ClientAuth:       return _impl->verifyClientAuth(*(impl::ClientAuthData*)bytes);
-            default:               return false;
+            case ClientChallenge:
+                return _impl->verifyChallenge(*(impl::ChallengeData*)bytes);
+            case ClientAuth:  
+                return _impl->verifyClientAuth(*(impl::ClientAuthData*)bytes)
+                    && (!_clientAuth || _clientAuth(_impl->getPeerPublicKey()));
+            default:
+                return false;
         }
     }
 
