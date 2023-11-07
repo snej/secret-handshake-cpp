@@ -294,6 +294,13 @@ namespace snej::shs {
     }
 
 
+    bool DecryptionStream::close() {
+        bool ok = _buffer.size() == _processedBytes;
+        _buffer.clear();
+        _processedBytes = 0;
+        return ok;
+    }
+
 }
 
 
