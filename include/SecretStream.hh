@@ -5,7 +5,7 @@
 //
 
 #pragma once
-#include "SecretHandshake.hh"
+#include "SecretHandshakeTypes.hh"
 #include <utility>
 #include <vector>
 

@@ -4,7 +4,7 @@ This is a C++ implementation of the [SecretHandshake](https://github.com/auditdr
 
 An (incomplete) C API is provided, for the use of clients written in C and for binding to other languages.
 
-There is also some glue code in the [capnproto](capnproto/README.md) subdirectory to use SecretHandshake with the awesome [Cap’n Proto](https://capnproto.org/) RPC library.
+There is also some glue code to use SecretHandshake with the [capnproto](capnproto/README.md) and [Crouton](crouton/README.md) networking libraries.
 
 ## 1. About SecretHandshake
 
