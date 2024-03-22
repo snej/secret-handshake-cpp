@@ -7,6 +7,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <cstring>
 
 namespace snej::shs {
 

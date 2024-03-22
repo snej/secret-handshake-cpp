@@ -15,6 +15,7 @@ if (MSVC)
     add_compile_options(/W4) # TODO: Add /WX
 else()
     add_compile_options(-Wall -Wpedantic -Werror -Wno-unknown-pragmas)
+    add_compile_definitions(_LIBCPP_REMOVE_TRANSITIVE_INCLUDES) # stops libc++ headers from including extra headers.
 endif()
 
 
