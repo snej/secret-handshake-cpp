@@ -79,6 +79,9 @@ namespace snej::shs::impl {
         bool verifyClientAuth(ClientAuthData const&);
         ServerAckData createServerAck();
 
+        /// Returns the peer's public key. May be called after `verifyClientAuth` returns true.
+        public_key const& getPeerPublicKey() const          {return _Yp.value();}
+
         // Both client and server call this last, to get the session keys:
         void getOutcome(session_key &encryptionKey,
                         nonce       &encryptionNonce,

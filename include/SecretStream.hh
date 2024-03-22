@@ -5,7 +5,7 @@
 //
 
 #pragma once
-#include "SecretHandshake.hh"
+#include "SecretHandshakeTypes.hh"
 #include <utility>
 #include <vector>
 
@@ -248,6 +248,10 @@ namespace snej::shs {
         /// @param size  The size of the encrypted data
         /// @return  True on success, false if the data is corrupted.
         bool push(const void *data, size_t size);
+
+        /// Call this when the stream from the sender ends and there is no more data to push.
+        /// @return  True if this is a clean close, false if there's an incomplete message.
+        bool close();
 
     private:
         DecryptoBox _decryptor;
