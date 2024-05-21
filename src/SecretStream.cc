@@ -28,8 +28,8 @@
 #include "shs.hh"
 #include "monocypher/encryption.hh"
 #include <stdexcept>
-#include <string.h>
-#include <assert.h>
+#include <cstring>
+#include <cassert>
 
 
 #define _UNUSED
@@ -362,4 +362,3 @@ SHSPeekResult  SHSDecryptoBox_Peek(SHSDecryptoBox *box, SHSInputBuffer in) {
 SHSStatus SHSDecryptoBox_Decrypt(SHSDecryptoBox *box, SHSInputBuffer *in, SHSOutputBuffer *out) {
     return (SHSStatus) internal(box)->decrypt(internal(in), internal(out));
 }
-

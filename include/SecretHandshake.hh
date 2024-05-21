@@ -74,11 +74,11 @@ namespace snej::shs {
 
         /// Current error; if not None, the handshake has failed and you should close the socket.
         /// Call this after `receivedBytes` and `bytesToSend`.
-        Error error()                  {return _error;}
+        Error error() const            {return _error;}
 
         /// Becomes true when the handshake is complete.
         /// Call this after `receivedBytes` and `bytesToSend`.
-        bool finished()                {return _step == Finished;}
+        bool finished() const          {return _step == Finished;}
 
         /// After the handshake is finished, this returns the results to use for communication.
         Session session();
