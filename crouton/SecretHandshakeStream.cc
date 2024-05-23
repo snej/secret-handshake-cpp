@@ -73,7 +73,7 @@ namespace snej::shs::crouton {
         if (_handshake->error()) {
             Error err(SecretHandshakeError(int(_handshake->error())));
             _handshake = nullptr;
-            LNet->error("...SecretHandshake failed: {}", minifmt::write(err));
+            LNet->error("...SecretHandshake failed: {}", crouton::mini::format("{}",err));
             RETURN err;
         }
 
@@ -200,7 +200,7 @@ namespace snej::shs::crouton {
     ASYNC<void> SecretHandshakeStream::write(const ConstBytes buffers[], size_t nBuffers) {
         _writer->skip(_lastWriteSize);
         _lastWriteSize = 0;
-        if (LNet->level() <= crouton::LogLevel::debug) {
+        if (LNet->level() <= crouton::log::level::debug) {
             size_t total = 0;
             for (size_t i = 0; i < nBuffers; ++i)
                 total += buffers[i].size();
