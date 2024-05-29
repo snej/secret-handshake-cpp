@@ -25,7 +25,7 @@
 //
 
 #include "shs.hh"
-
+#include "monocypher/ext/sha512.hh"
 
 /* Follow along with CheatSheet.md! The variable names here follow the same terminology. */
 
