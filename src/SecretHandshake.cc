@@ -104,7 +104,7 @@ namespace snej::shs {
     bool Handshake::readCompleted() {
         if (_inputBuffer.size() != byteCountNeeded())
             throw std::logic_error("Unexpected call to Handshake::readCompleted");
-        if (_receivedBytes(_inputBuffer.data()) > 0) {
+        if (_receivedBytes(_inputBuffer.data())) {
             LOG "          ...OK!\n";
             nextStep();
             _inputBuffer.clear();

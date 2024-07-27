@@ -50,7 +50,8 @@ namespace snej::shs::crouton {
 
     ASYNC<Session> SecretHandshake::handshake(std::shared_ptr<io::IStream> stream) {
         precondition(stream);
-        AWAIT stream->open();
+        if (!stream->isOpen())
+            AWAIT stream->open();
 
         // Handshake:
         LNet->info("Starting SecretHandshake");
