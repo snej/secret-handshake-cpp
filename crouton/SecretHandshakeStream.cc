@@ -29,13 +29,26 @@
 #include "../include/SecretStream.hh"
 #include "crouton/Future.hh"
 #include "crouton/util/Logging.hh"
+#include <mutex>
 
 namespace snej::shs::crouton {
     using namespace std;
     using namespace ::crouton;
 
 
+    shs_printflike(2,0)
+    static void shslog(LogLevel level, const char* format, va_list args)  {
+        char* message = nullptr;
+        if (vasprintf(&message, format, args) >= 0)
+            LNet->log(log::level::level_enum(int(level)), "SecretHandshake: {}", message);
+        free(message);
+    }
+
+
     SecretHandshake::SecretHandshake(Context const& context, PublicKey const* serverKey) {
+        static once_flag sOnce;
+        call_once(sOnce, [] { if (!LogCallback) LogCallback = shslog; });
+
         if (serverKey)
             _handshake = make_unique<ClientHandshake>(context, *serverKey);
         else
@@ -54,7 +67,6 @@ namespace snej::shs::crouton {
             AWAIT stream->open();
 
         // Handshake:
-        LNet->info("Starting SecretHandshake");
         do {
             auto [toSend, sizeToSend] = _handshake->bytesToSend();
             if (sizeToSend > 0) {
@@ -74,14 +86,12 @@ namespace snej::shs::crouton {
         if (_handshake->error()) {
             Error err(SecretHandshakeError(int(_handshake->error())));
             _handshake = nullptr;
-            LNet->error("...SecretHandshake failed: {}", crouton::mini::format("{}",err));
             RETURN err;
         }
 
         // Handshake succeeded:
         auto session = _handshake->session();
         _handshake = nullptr;
-        LNet->info("...SecretHandshake succeeded!");
         RETURN session;
     }
 

@@ -14,8 +14,16 @@ set(CMAKE_C_STANDARD_REQUIRED   ON)
 if (MSVC)
     add_compile_options(/W4) # TODO: Add /WX
 else()
-    add_compile_options(-Wall -Wpedantic -Werror -Wno-unknown-pragmas)
-    add_compile_definitions(_LIBCPP_REMOVE_TRANSITIVE_INCLUDES) # stops libc++ headers from including extra headers.
+    add_compile_options(
+        -Wall
+        -Wpedantic
+        -Werror
+        -Wno-unknown-pragmas
+        -Wno-gnu-zero-variadic-macro-arguments  # token pasting of ',' and __VA_ARGS__
+    )
+    add_compile_definitions(
+        _LIBCPP_REMOVE_TRANSITIVE_INCLUDES # stops libc++ headers from including extra headers.
+    )
 endif()
 
 

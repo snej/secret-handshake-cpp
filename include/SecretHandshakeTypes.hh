@@ -6,8 +6,14 @@
 
 #pragma once
 #include <array>
+#include <cstdarg>
 #include <cstdint>
 #include <cstring>
+
+#if __has_attribute(format)
+#   define shs_printflike(FMT,DOT)  __attribute__((__format__ (__printf__, FMT, DOT)))
+#endif
+
 
 namespace snej::shs {
 
@@ -105,5 +111,12 @@ namespace snej::shs {
 
         ~Session();
     };
+
+
+    /// Log levels; same values as spdlog or Crouton.
+    enum class LogLevel { trace, debug, info, warn, err, critical, off };
+
+    /// Optional callback to receive log messages created by SecretHandshake.
+    extern void (*LogCallback)(LogLevel, const char* format, va_list args) shs_printflike(2,0);
 
 }

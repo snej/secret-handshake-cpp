@@ -24,22 +24,26 @@
 // THE SOFTWARE.
 
 #include "SecretHandshake.hh"
+#include "SecretHandshake_Internal.hh"
 #include "shs.hh"
 #include "monocypher/signatures.hh"
 #include <cstring>
 #include <mutex>
 #include <stdexcept>
 
-// Minimalist logging. Define LOG_SECRET_HANDSHAKE=1 to enable it.
-#ifndef LOG_SECRET_HANDSHAKE
-#  define LOG_SECRET_HANDSHAKE 0
-#endif
-#ifdef LOG_SECRET_HANDSHAKE
-#  include <iostream>
-#endif
-#define LOG  if (LOG_SECRET_HANDSHAKE) std::cerr << "SecretHandshake: " <<
-
 namespace snej::shs {
+
+
+    void (*LogCallback)(LogLevel, const char* format, va_list args);
+
+    void _Log(LogLevel level, const char*format, ...) noexcept {
+        if (LogCallback) {
+            va_list args;
+            va_start(args, format);
+            LogCallback(level, format, args);
+            va_end(args);
+        }
+    }
 
 
     KeyPair::KeyPair(SigningKey const& sk)
@@ -88,14 +92,14 @@ namespace snej::shs {
         assert(_step > Failed && _step < Finished);
         _step = Step(_step + 1);
         if (_step == Finished)
-            LOG "Success!\n";
+            Log(info, "Successful handshake!");
     }
 
 
     std::pair<void*, size_t> Handshake::bytesToRead() {
         size_t needed = byteCountNeeded();
         if (needed > 0)
-            LOG "Step " << _step << "/4: Awaiting " << needed << " bytes...\n";
+            Log(debug, "Step %d/4: Awaiting %zu bytes...", _step, needed);
         _inputBuffer.resize(needed);
         return {_inputBuffer.data(), needed};
     }
@@ -105,12 +109,12 @@ namespace snej::shs {
         if (_inputBuffer.size() != byteCountNeeded())
             throw std::logic_error("Unexpected call to Handshake::readCompleted");
         if (_receivedBytes(_inputBuffer.data())) {
-            LOG "          ...OK!\n";
+            Log(debug, "Step %d OK", _step);
             nextStep();
             _inputBuffer.clear();
             return true;
         } else {
-            LOG "          ...invalid data; HANDSHAKE FAILED\n";
+            Log(err, "Received invalid data in step %d; HANDSHAKE FAILED", _step);
             failed();
             return false;
         }
@@ -118,7 +122,7 @@ namespace snej::shs {
 
 
     void Handshake::readFailed() {
-        LOG "          ...unexpected EOF; HANDSHAKE FAILED\n";
+        Log(err, "Unexpected EOF at step %d; HANDSHAKE FAILED", _step);
         failed();
     }
 
@@ -140,7 +144,7 @@ namespace snej::shs {
         _inputBuffer.insert(_inputBuffer.end(), (uint8_t*)src, (uint8_t*)src + count);
         if (_inputBuffer.size() < needed) {
             // Wait for more bytes:
-            LOG "          ...Received " << count << "bytes; waiting...\n";
+            Log(debug, "Received %zu bytes; waiting...", count);
         } else {
             // Buffer has enough bytes, so consume it:
             readCompleted();
@@ -155,7 +159,7 @@ namespace snej::shs {
         if (_outputBuffer.empty())
             _fillOutputBuffer(_outputBuffer);
         if (!_outputBuffer.empty())
-            LOG "Step " << _step << "/4: Sending " << _outputBuffer.size() << " bytes...\n";
+            Log(debug, "Step %d/4: Sending %zu bytes...", _step, _outputBuffer.size());
         return {_outputBuffer.data(), _outputBuffer.size()};
     }
 
@@ -163,7 +167,7 @@ namespace snej::shs {
     void Handshake::sendCompleted() {
         if (_outputBuffer.empty())
             throw std::logic_error("Unexpected call to Handshake::sendCompleted");
-        LOG "          ...Send completed\n";
+        Log(debug, "Send completed");
         _outputBuffer.clear();
         nextStep();
     }
@@ -183,10 +187,10 @@ namespace snej::shs {
         _outputBuffer.erase(_outputBuffer.begin(), _outputBuffer.begin() + count);
         if (_outputBuffer.empty()) {
             // Write is complete:
-            LOG "        ...Send completed\n";
+            Log(debug, "Send completed");
             nextStep();
         } else {
-            LOG "        ...Sent " << count << "bytes...\n";
+            Log(debug, "Sent %zu bytes...", count);
         }
         return count;
     }
