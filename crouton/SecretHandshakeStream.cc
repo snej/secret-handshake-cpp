@@ -204,23 +204,23 @@ namespace snej::shs::crouton {
     }
 
 
-    ASYNC<void> SecretHandshakeStream::write(ConstBytes bytes) {
-        return write(&bytes, 1);
+    coro_wrapper_ ASYNC<void> SecretHandshakeStream::write(ConstBytes bytes) {
+        return write(span(&bytes, 1));
     }
 
-    ASYNC<void> SecretHandshakeStream::write(const ConstBytes buffers[], size_t nBuffers) {
+    coro_wrapper_ ASYNC<void> SecretHandshakeStream::write(span<ConstBytes const> buffers) {
         _writer->skip(_lastWriteSize);
         _lastWriteSize = 0;
         if (LNet->level() <= crouton::log::level::debug) {
             size_t total = 0;
-            for (size_t i = 0; i < nBuffers; ++i)
-                total += buffers[i].size();
+            for (auto& buffer : buffers)
+                total += buffer.size();
             LNet->debug("SecretHandshakeStream {} writing {} bytes", (void*)this, total);
         }
         if (!_open)
             return CroutonError::InvalidState;
-        for (size_t i = 0; i < nBuffers; ++i)
-            _writer->pushPartial(buffers[i].data(), buffers[i].size());
+        for (auto& buffer : buffers)
+            _writer->pushPartial(buffer.data(), buffer.size());
         _writer->flush();
         auto encBytes = _writer->availableData();
         _lastWriteSize = encBytes.size;

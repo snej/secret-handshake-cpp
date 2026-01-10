@@ -35,7 +35,8 @@ using namespace snej::shs;
 using namespace ::crouton;
 
 
-static void RunCoroutine(function<Future<void>()> test) {
+template <typename FN>
+static void RunCoroutine(FN test) {
     Future<void> f = test();
     Scheduler::current().runUntil([&]{return f.hasResult();});
     f.result(); // check exception
@@ -73,5 +74,3 @@ TEST_CASE("SecretHandshakeStream", "[SecretHandshake]") {
         RETURN noerror;
     });
 }
-
-

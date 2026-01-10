@@ -73,13 +73,13 @@ namespace snej::shs::crouton {
         bool isOpen() const override;
         ASYNC<void> open() override;
         ASYNC<void> close() override;
-        ASYNC<void> closeWrite() override;
+        coro_wrapper_ ASYNC<void> closeWrite() override;
 
         ASYNC<ConstBytes> readNoCopy(size_t maxLen = 65536) override;
         ASYNC<ConstBytes> peekNoCopy() override;
 
         ASYNC<void> write(ConstBytes) override;
-        ASYNC<void> write(const ConstBytes buffers[], size_t nBuffers) override;
+        ASYNC<void> write(std::span<ConstBytes const> buffers) override;
 
         /// The connected peer's public key. Stream MUST be open.
         PublicKey const& peerPublicKey() const;
@@ -112,7 +112,7 @@ namespace snej::shs::crouton {
     class SecretHandshakeSocket : public io::ISocket {
     public:
         SecretHandshakeSocket(Context const&, PublicKey const& serverKey);
-        ASYNC<void> open() override;
+        coro_wrapper_ ASYNC<void> open() override;
         std::shared_ptr<io::IStream> stream() override;
 
     private:
